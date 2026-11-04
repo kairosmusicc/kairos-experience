@@ -1,437 +1,195 @@
 const $=(s,r=document)=>r.querySelector(s);
 const $$=(s,r=document)=>[...r.querySelectorAll(s)];
+const intro=$('#intro'), phoneScene=$('#phoneScene'), lock=$('#lock'), home=$('#home'), appView=$('#appView'), appContent=$('#appContent'), device=$('#device'), statusBar=$('#statusBar'), modal=$('#modal'), toastEl=$('#toast');
+let routeStack=[];
 
-const intro=$("#intro"), phoneScene=$("#phoneScene"), lockscreen=$("#lockscreen"), home=$("#home"), appView=$("#appView"), appContent=$("#appContent");
-const incomingCall=$("#incomingCall"), activeCall=$("#activeCall"), callAudio=$("#callAudio"), toastEl=$("#toast");
-let stack=["home"], callTimer=null, callSeconds=0;
-
-const AUDIO={
-  abeg:"assets/audio/abeg.wav",
-  toutgacher:"assets/audio/tout_gacher.wav"
-};
-const unlocked={
-  abeg:localStorage.kairos_abeg==="1",
-  toutgacher:localStorage.kairos_toutgacher==="1"
-};
-
-const photos=[
-  "manii-01.jpg","manii-02.jpg","duo-01.jpg","paapii-01.jpg","lockscreen-cicatrices.png","IMG_2207-2.png"
+const ALBUM_URL='https://album.link/qzsdrsh5r3m8j';
+const AUDIO={abeg:'assets/audio/abeg.wav',tout:'assets/audio/tout_gacher.wav'};
+const GALLERY=[
+  'assets/images/manii-01.jpg','assets/images/manii-02.jpg','assets/images/duo-01.jpg','assets/images/paapii-01.jpg','assets/images/lockscreen-cicatrices.png','assets/images/IMG_2207-2.png',
+  'assets/images/gallery-studio.jpg','assets/images/gallery-kid.jpg','assets/images/gallery-cat.jpg','assets/images/gallery-track-1.png','assets/images/gallery-track-2.png','assets/images/gallery-track-3.png','assets/images/gallery-track-4.png','assets/images/gallery-track-5.png'
 ];
 
-const messagesData={
-  paapii:{name:"Paapii",subtitle:"iMessage",messages:[
-    ["me","frérot t’as gardé la dernière version d’abeg ?"],
-    ["","oui pourquoi"],
-    ["me","celle qu’on devait garder de côté"],
-    ["","ouais elle est dans les fichiers"],
-    ["me","j’ai encore oublié le code 💀"],
-    ["","mais t’es grave"],
-    ["me","c’était quoi déjà"],
-    ["","la date du projet"],
-    ["me","29/10"],
-    ["","maintenant retourne-la"]
+const IMessageThreads={
+  paapii:{name:'Paapii',avatar:'assets/images/paapii-01.jpg',preview:'le code c’est tjrs le même ?',time:'23:41',messages:[
+    ['them','t’as gardé le bounce d’abeg ?'],['me','ouais dans fichiers'],['them','le code c’est tjrs le même ?'],['me','j’ai oublié mdrr'],['them','la date du projet'],['me','29/10 ?'],['them','retourne-la.']
   ]},
-  corentin:{name:"Corentin",subtitle:"iMessage",messages:[
-    ["","J’ai remis l’ordre final de KAIROS."],
-    ["me","carré"],
-    ["","ABEG vous le gardez pour vous pour l’instant."],
-    ["me","oui"],
-    ["","Et l’autre morceau aussi."],
-    ["me","Tout gâcher ?"],
-    ["","Oui. Ne le mettez pas dans le dossier public."]
+  corentin:{name:'Corentin',avatar:'assets/images/gallery-kid.jpg',preview:'planning validé ✅',time:'22:18',messages:[
+    ['them','planning validé ✅'],['me','parfait'],['them','on garde les deux exclus hors du dossier public'],['me','oui'],['them','je fais le point demain avec vous deux']
   ]},
-  yoan:{name:"Yoan — Zénithal",subtitle:"iMessage",messages:[
-    ["","Les selects sont prêts."],
-    ["me","lourd envoie"],
-    ["","J’en ai gardé 5."],
-    ["me","parfait"],
-    ["","Vous validez laquelle pour la prochaine annonce ?"],
-    ["me","je regarde ça ce soir"]
+  yoan:{name:'Yoan — Zénithal',avatar:'assets/images/gallery-studio.jpg',preview:'je vous renvoie les exports',time:'19:06',messages:[
+    ['them','je vous renvoie les exports'],['me','lourd merci'],['them','j’ai aussi gardé quelques photos du shooting'],['me','mets-les dans le tel']
   ]},
-  redka:{name:"Redka",subtitle:"iMessage",messages:[
-    ["","T’as écouté l’intro avec les modifs ?"],
-    ["me","ouais c’est mieux"],
-    ["","Je te renvoie le bounce propre."],
-    ["me","vas-y"]
+  redka:{name:'Redka',avatar:'assets/images/gallery-cat.jpg',preview:'le bounce est propre',time:'18:42',messages:[
+    ['them','le bounce est propre'],['me','ça marche'],['them','j’ai juste resserré l’intro'],['me','parfait']
   ]}
 };
 
-function show(view){
-  $$(".view").forEach(v=>v.classList.remove("active-view"));
-  view.classList.add("active-view");
-}
-function goHome(){
-  stack=["home"];
-  show(home);
-  appContent.innerHTML="";
-}
-function toast(msg,ms=1800){
-  toastEl.textContent=msg;
-  toastEl.classList.remove("hidden");
-  clearTimeout(toast._t);
-  toast._t=setTimeout(()=>toastEl.classList.add("hidden"),ms);
-}
-function nativeHeader(title,{light=false,back=true,sub=""}={}){
-  return `<div class="native-header ${light?"light":""}">
-    ${back?'<button class="back-btn" data-back>‹</button>':'<span class="header-spacer"></span>'}
-    <div style="flex:1"><h2>${title}</h2>${sub?`<small>${sub}</small>`:""}</div>
-    <span class="header-spacer"></span>
-  </div>`;
-}
-function push(route,params={}){
-  stack.push({route,params});
-  renderRoute(route,params);
-}
-function pop(){
-  if(stack.length<=1){goHome();return}
-  stack.pop();
-  const prev=stack[stack.length-1];
-  if(prev==="home") goHome(); else renderRoute(prev.route,prev.params,false);
-}
-function wireCommon(){
-  $$("[data-back]",appContent).forEach(b=>b.onclick=pop);
-}
-function openRoute(route,params={}){
-  stack=["home",{route,params}];
-  renderRoute(route,params,false);
-}
-function renderRoute(route,params={},pushState=false){
-  show(appView);
-  const map={
-    messages:renderMessages,photos:renderPhotos,notes:renderNotes,files:renderFiles,camera:renderCamera,
-    music:renderMusic,whatsapp:renderWhatsApp,spotify:renderSpotify,instagram:renderInstagram,
-    settings:renderSettings,phone:renderPhone,safari:renderSafari,
-    imessage:()=>renderIMessage(params.id),
-    whatsappchat:()=>renderWhatsAppChat(params.id||"paapii"),
-    lockedfile:()=>renderLockedFile(params.id),
-    player:()=>renderPlayer(params.id),
-    instascreen:()=>renderInstagramScreen(params.screen)
-  };
-  appContent.innerHTML="";
-  (map[route]||(()=>{appContent.innerHTML=nativeHeader("KAIROS")+"<div style='padding:20px'>Rien ici.</div>"}))();
-  wireCommon();
-}
+const WAThreads={
+  paapii:{name:'Paapii',avatar:'assets/images/paapii-01.jpg',preview:'j’ai retrouvé le mix',time:'23:48',unread:1,messages:[
+    ['them','frérot'],['them','j’ai retrouvé le mix qu’on devait pas mettre dans le dossier'],['me','tout gâcher ?'],['them','oui'],['audio','tout_gacher.wav'],['me','le mdp ?'],['them','4 lettres. c’est littéralement le thème du projet 💀']
+  ]},
+  kairos:{name:'KAIROS',avatar:'assets/images/duo-01.jpg',preview:'Corentin : planning validé ✅',time:'22:41',messages:[['them','Corentin : planning validé ✅'],['me','on est bons'],['them','Yoan : je vous renvoie les exports ce soir']]},
+  corentin:{name:'Corentin',avatar:'assets/images/gallery-kid.jpg',preview:'on fait le point demain',time:'18:12',messages:[['them','on fait le point demain'],['me','ça marche'],['them','je vous envoie la dernière checklist avant midi']]},
+  yoan:{name:'Yoan',avatar:'assets/images/gallery-studio.jpg',preview:'je vous renvoie les exports',time:'17:06',messages:[['them','je vous renvoie les exports'],['me','merci frère'],['them','les selects photo aussi']]}
+};
 
-$("#powerBtn").onclick=()=>{intro.classList.remove("active");phoneScene.classList.add("active");show(lockscreen)};
-$("#unlockBtn").onclick=goHome;
-$("#homeGesture").onclick=goHome;
-$$("[data-route]").forEach(b=>b.onclick=()=>openRoute(b.dataset.route));
-$$(".notif[data-route]").forEach(b=>b.onclick=()=>openRoute(b.dataset.route));
+function pad(n){return String(n).padStart(2,'0')}
+function syncClock(){
+  const d=new Date();
+  const time=`${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  $('#statusTime').textContent=time;
+  $('#lockTime').textContent=time;
+  const days=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'];
+  const months=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
+  $('#lockDate').textContent=`${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
+}
+setInterval(syncClock,15000); syncClock();
+
+function setStatus(dark=false){statusBar.className='status-bar '+(dark?'dark-status':'light-status');device.classList.toggle('dark-ui',dark)}
+function show(v){$$('.view').forEach(x=>x.classList.remove('active-view'));v.classList.add('active-view')}
+function goHome(){routeStack=[];setStatus(false);show(home);appContent.innerHTML=''}
+function openApp(html,{dark=false,push=true}={}){if(push) routeStack.push(appContent.innerHTML);setStatus(dark);appContent.innerHTML=html;show(appView);bindDynamic()}
+function toast(msg,ms=1700){toastEl.textContent=msg;toastEl.classList.remove('hidden');clearTimeout(toast._t);toast._t=setTimeout(()=>toastEl.classList.add('hidden'),ms)}
+function escapeHTML(s=''){return s.replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
+function avatarHTML(src,name=''){return src?`<img class="avatar" src="${src}" alt="">`:`<span class="avatar initial">${escapeHTML(name[0]||'?')}</span>`}
+
+function nav(title,right=''){return `<div class="ios-nav"><button class="back" data-app-back>‹</button><h2>${title}</h2><button class="action">${right}</button></div>`}
 
 function renderMessages(){
-  appContent.innerHTML=`${nativeHeader("Messages",{back:true})}
-    <div class="messages-list">
-      <div class="ios-search">🔍 Rechercher</div>
-      ${msgThread("paapii","P","maintenant","maintenant retourne-la")}
-      ${msgThread("corentin","C","hier","ne le mettez pas dans le dossier public")}
-      ${msgThread("yoan","Y","hier","Les selects sont prêts")}
-      ${msgThread("redka","R","lun.","je te renvoie le bounce propre")}
-    </div>`;
-  $$("[data-imessage]",appContent).forEach(x=>x.onclick=()=>push("imessage",{id:x.dataset.imessage}));
+  const rows=Object.entries(IMessageThreads).map(([id,t],i)=>`<div class="row" data-msg-thread="${id}">${avatarHTML(t.avatar,t.name)}<div class="row-copy"><b>${t.name}</b><span>${i===0?'<span class="blue-dot"></span> ':''}${t.preview}</span></div><div class="row-meta">${t.time}</div></div>`).join('');
+  openApp(`<div class="messages-app"><div class="messages-nav"><h1>Messages</h1><button class="round-action">✎</button></div><div class="search-box">⌕ Rechercher</div><div class="list">${rows}</div></div>`);
 }
-function msgThread(id,initial,time,preview){
-  const n=messagesData[id].name;
-  return `<button class="msg-thread" data-imessage="${id}" style="width:100%;border:0;background:none">
-    <div class="msg-avatar">${initial}</div>
-    <div class="msg-copy">
-      <div class="msg-top"><b>${n}</b><span>${time} ›</span></div>
-      <p>${preview}</p>
-    </div>
-  </button>`;
-}
-function renderIMessage(id){
-  const c=messagesData[id];
-  appContent.innerHTML=`<div class="chat-screen">
-    <div class="native-header chat-head">
-      <button class="back-btn" data-back>‹</button>
-      <div class="chat-title"><b>${c.name}</b><span>${c.subtitle}</span></div>
-      <span class="header-spacer"></span>
-    </div>
-    <div class="chat-body">${c.messages.map(m=>`<div class="bubble ${m[0]}">${m[1]}</div>`).join("")}</div>
-    <div class="chat-input">iMessage</div>
-  </div>`;
-}
-
-function renderPhotos(){
-  appContent.innerHTML=`<div class="photos-wrap">${nativeHeader("Photos",{back:true})}
-    <h2 class="photos-title">Récents</h2>
-    <div class="gallery">${photos.map((f,i)=>`<button data-photo="${i}" style="padding:0;border:0;background:none"><img src="assets/images/${f}" alt=""></button>`).join("")}</div>
-  </div>`;
-  $$("[data-photo]",appContent).forEach(btn=>btn.onclick=()=>{
-    const f=photos[+btn.dataset.photo];
-    appContent.innerHTML=`<div class="photo-full"><button class="back-btn" data-back style="position:absolute;top:58px;left:10px;z-index:2">‹</button><img src="assets/images/${f}"></div>`;
-    wireCommon();
-  });
-}
-
-function renderNotes(){
-  appContent.innerHTML=`<div class="notes-wrap">${nativeHeader("Notes",{light:true,back:true})}
-    <h2 class="note-title">Toutes les notes</h2>
-    ${note("KAIROS","καιρός\nle bon moment\nl’instant qu’on ne contrôle pas\ncelui qu’on reconnaît parfois trop tard")}
-    ${note("À faire","finaliser cover\nappeler Yoan\nexports reels\nvérifier tracklist\nretrouver le mdp du fichier de Paapii\nrépondre à Corentin")}
-    ${note("02:43","Pourquoi cette heure revient tout le temps ?")}
-  </div>`;
-}
-function note(title,body){return `<div class="note-card"><h3>${title}</h3><p>${body}</p></div>`}
-
-function renderFiles(){
-  appContent.innerHTML=`<div class="files-wrap">${nativeHeader("Fichiers",{light:true,back:true})}
-    <div class="files-body">
-      <div class="files-section">Sur mon iPhone</div>
-      <div class="file-card">
-        ${folder("KAIROS")}${folder("SHOOTING")}${folder("EXPORTS")}${folder("PERSO")}
-      </div>
-      <div class="files-section">KAIROS</div>
-      <div class="file-card">
-        ${file("TRACKLIST.txt","Document texte")}
-        ${file("cover_final.jpg","Image")}
-        ${audioFile("abeg","ABEG_MASTER.wav")}
-        ${file("notes_session.txt","Document texte")}
-      </div>
-    </div></div>`;
-  $$("[data-file]",appContent).forEach(b=>b.onclick=()=>openAudioFile(b.dataset.file));
-  $$("[data-dummy]",appContent).forEach(b=>b.onclick=()=>toast("Ce fichier ne contient rien d’utile."));
-}
-function folder(name){return `<div class="file-row"><div class="file-icon">📁</div><div class="file-meta"><b>${name}</b><small>Dossier</small></div></div>`}
-function file(name,type){return `<div class="file-row"><div class="file-icon">▤</div><div class="file-meta"><b>${name}</b><small>${type}</small></div><button data-dummy>Ouvrir</button></div>`}
-function audioFile(id,name){return `<div class="file-row"><div class="file-icon">🎵</div><div class="file-meta"><b>${name}</b><small>${unlocked[id]?"Déverrouillé":"Protégé"}</small></div><button data-file="${id}">${unlocked[id]?"Ouvrir":"🔒"}</button></div>`}
-function openAudioFile(id){
-  if(unlocked[id]) push("player",{id});
-  else push("lockedfile",{id});
-}
-function renderLockedFile(id){
-  const abeg=id==="abeg";
-  appContent.innerHTML=`<div class="lock-wrap">
-    <button class="back-btn" data-back style="position:absolute;top:58px;left:12px">‹</button>
-    <div class="lock-mark">⌁</div>
-    <h3>${abeg?"ABEG_MASTER.wav":"tout_gacher.wav"}</h3>
-    <p>${abeg?"Code à 4 chiffres":"Mot de passe · 4 lettres"}</p>
-    <form id="lockForm" class="lock-form">
-      <input id="lockInput" maxlength="4" inputmode="${abeg?"numeric":"text"}" placeholder="••••">
-      <button>Déverrouiller</button>
-    </form>
-    <div id="feedback" class="feedback"></div>
-    <button id="hintBtn" style="border:0;background:none;color:#0a84ff">Indice</button>
-  </div>`;
-  $("#lockForm").onsubmit=e=>{
-    e.preventDefault();
-    const val=$("#lockInput").value.trim().toUpperCase();
-    const ok=abeg?val==="1029":val==="TIME";
-    if(!ok){$("#feedback").textContent=abeg?"Mauvais code.":"Mauvais mot de passe.";return}
-    unlocked[id]=true;
-    localStorage[id==="abeg"?"kairos_abeg":"kairos_toutgacher"]="1";
-    stack.pop();
-    push("player",{id});
-  };
-  $("#hintBtn").onclick=()=>$("#feedback").textContent=abeg?"Indice : 29/10, mais à l’envers.":"Indice : ce que KAIROS te répète depuis le début.";
-}
-function renderPlayer(id){
-  const abeg=id==="abeg";
-  const source=abeg?AUDIO.abeg:AUDIO.toutgacher;
-  appContent.innerHTML=`<div class="player-wrap">
-    ${nativeHeader(abeg?"ABEG":"TOUT GÂCHER",{back:true})}
-    <div class="player-art"><img src="${abeg?"assets/images/duo-01.jpg":"assets/images/lockscreen-cicatrices.png"}"></div>
-    <div class="player-meta"><b>Manii & Paapii</b><small>${abeg?"ABEG_MASTER.wav":"tout_gacher.wav"}</small></div>
-    <div class="progress"><i id="progressFill"></i></div>
-    <div class="player-controls">
-      <button id="rewind">−10</button>
-      <button id="playBtn" class="play">▶</button>
-      <button id="forward">+10</button>
-    </div>
-    <audio id="audioPlayer" preload="metadata" src="${source}"></audio>
-    <div id="detected" class="detected hidden">1 élément supplémentaire détecté.</div>
-  </div>`;
-  const a=$("#audioPlayer"), play=$("#playBtn");
-  play.onclick=async()=>{try{if(a.paused){await a.play();play.textContent="Ⅱ"}else{a.pause();play.textContent="▶"}}catch{toast("Audio introuvable.")}};
-  $("#rewind").onclick=()=>a.currentTime=Math.max(0,a.currentTime-10);
-  $("#forward").onclick=()=>a.currentTime=Math.min(a.duration||0,a.currentTime+10);
-  a.ontimeupdate=()=>$("#progressFill").style.width=(a.duration?a.currentTime/a.duration*100:0)+"%";
-  a.onended=()=>{
-    play.textContent="▶";
-    if(abeg){
-      $("#detected").classList.remove("hidden");
-      toast("1 élément supplémentaire détecté.",2200);
-      setTimeout(()=>show(incomingCall),2800);
-    }
-  };
+function renderMessageThread(id){
+  const t=IMessageThreads[id]; if(!t)return;
+  const msgs=t.messages.map((m,i)=>`${i===0?'<div class="time-label">Aujourd’hui '+t.time+'</div>':''}<div class="bubble-line ${m[0]==='me'?'me':'them'}"><div class="bubble">${escapeHTML(m[1])}</div></div>`).join('');
+  openApp(`<div class="thread-wrap"><div class="thread-head"><button class="back" data-app-back>‹</button><div class="thread-person">${avatarHTML(t.avatar,t.name)}<b>${t.name} ›</b></div><div class="info">ⓘ</div></div><div class="bubble-area">${msgs}</div><div class="compose"><i>＋</i><div class="compose-box">iMessage</div><i>🎙</i></div></div>`);
 }
 
 function renderWhatsApp(){
-  appContent.innerHTML=`<div class="wa-wrap">
-    <div class="wa-top">
-      <h2 class="wa-title">Discussions</h2>
-      <div class="wa-filters"><span class="wa-pill active">Toutes</span><span class="wa-pill">Non lues 1</span><span class="wa-pill">Favoris</span><span class="wa-pill">Groupes 1</span></div>
-    </div>
-    <div class="wa-list">
-      ${waItem("paapii","P","22:53","4 lettres.","1")}
-      ${waItem("kairos","K","21:44","Corentin : planning validé ✅","")}
-      ${waItem("corentin","C","18:12","on fait le point demain","")}
-      ${waItem("yoan","Y","17:06","je vous renvoie les exports","")}
-    </div>
-  </div>`;
-  $$("[data-wa]",appContent).forEach(x=>x.onclick=()=>push("whatsappchat",{id:x.dataset.wa}));
+  const order=['paapii','kairos','corentin','yoan'];
+  const rows=order.map(id=>{const t=WAThreads[id];return `<div class="row wa-row" data-wa-thread="${id}">${avatarHTML(t.avatar,t.name)}<div class="row-copy wa-preview"><b>${t.name}</b><span>${id==='kairos'?'<span class="checks">✓✓</span> ':''}${t.preview}</span></div><div class="row-meta">${t.time}${t.unread?`<span class="green-badge">${t.unread}</span>`:''}</div></div>`}).join('');
+  openApp(`<div class="wa-app"><div class="wa-top"><span style="color:#007aff">Modifier</span><h1>Discussions</h1><div class="wa-actions">◉ ＋</div></div><div class="wa-search">⌕ Rechercher</div><div class="chip-row"><span class="chip active">Toutes</span><span class="chip">Non lues 1</span><span class="chip">Favoris</span><span class="chip">Groupes 1</span></div><div class="list">${rows}</div></div>`);
 }
-function waItem(id,initial,time,preview,badge){
-  const names={paapii:"Paapii",kairos:"KAIROS",corentin:"Corentin",yoan:"Yoan"};
-  return `<button data-wa="${id}" class="wa-item" style="width:100%;border:0;background:none;color:inherit;text-align:left">
-    <div class="wa-avatar">${initial}</div>
-    <div class="wa-copy">
-      <div class="wa-rowtop"><b>${names[id]}</b><span>${time}</span></div>
-      <p>${preview}</p>
-    </div>${badge?`<span class="wa-badge">${badge}</span>`:""}
-  </button>`;
-}
-function renderWhatsAppChat(id){
-  const names={paapii:"Paapii",kairos:"KAIROS",corentin:"Corentin",yoan:"Yoan"};
-  let body="";
-  if(id==="paapii"){
-    body=[
-      waBubble("","t’as écouté la dernière version ?","22:41"),
-      waBubble("me","de quoi","22:42"),
-      waBubble("","tout gâcher","22:42"),
-      waBubble("me","non envoie","22:42"),
-      waBubble("","att","22:43"),
-      `<button id="waAudioFile" class="wa-bubble" style="border:0;color:#fff;text-align:left">
-        <div class="wa-doc"><span class="wa-doc-icon">🎵</span><div><b>tout_gacher.wav</b><small style="display:block;color:#aebac1">Fichier audio</small></div><span class="wa-time">22:43</span></div>
-      </button>`,
-      waBubble("me","encore un mot de passe ???","22:44"),
-      waBubble("","😂","22:44"),
-      waBubble("me","donne","22:44"),
-      waBubble("","nan réfléchis","22:44"),
-      waBubble("me","indice au moins","22:45"),
-      waBubble("","ce que KAIROS essaie de te faire comprendre depuis le début","22:45"),
-      waBubble("me","??","22:45"),
-      waBubble("","4 lettres.","22:46")
-    ].join("");
-  } else if(id==="kairos"){
-    body=waBubble("","Planning validé ✅","21:41")+waBubble("me","on garde jeudi pour les exports","21:42")+waBubble("","Oui. Corentin fait le point demain matin.","21:44");
-  } else if(id==="corentin"){
-    body=waBubble("","On fait le point demain.","18:12")+waBubble("me","oui carré","18:13")+waBubble("","Pensez au dernier export KAIROS.","18:14");
-  } else {
-    body=waBubble("","Je vous renvoie les exports.","17:06")+waBubble("me","merci frérot","17:07")+waBubble("","Les selects sont prêts aussi.","17:08");
-  }
-  appContent.innerHTML=`<div class="wa-chat">
-    <div class="wa-chat-head">
-      <button class="back-btn" data-back>‹</button>
-      <div class="wa-avatar" style="width:36px;height:36px">${names[id][0]}</div>
-      <div class="wa-chat-name"><b>${names[id]}</b><span>en ligne</span></div>
-      <div class="wa-actions"><span>◉</span><span>☎</span></div>
-    </div>
-    <div class="wa-wall">${body}</div>
-    <div class="wa-input"><div class="wa-inputbox">Message</div><div class="wa-mic">🎙</div></div>
-  </div>`;
-  if($("#waAudioFile")) $("#waAudioFile").onclick=()=>openAudioFile("toutgacher");
-}
-function waBubble(side,text,time){return `<div class="wa-bubble ${side}">${text}<span class="wa-time">${time}${side==="me"?" ✓✓":""}</span></div>`}
-
-function renderCamera(){
-  appContent.innerHTML=`<div class="camera-ui">
-    <video id="cameraVideo" autoplay muted loop playsinline src="assets/video/camera.mp4"></video>
-    <div class="camera-top"><span>⚡</span><span>⌃</span><span>◉</span></div>
-    <div class="camera-modes"><span>CINÉMATIQUE</span><span>VIDÉO</span><b>PHOTO</b><span>PORTRAIT</span></div>
-    <div class="camera-bottom"><div class="cam-thumb"><img src="assets/images/duo-01.jpg"></div><button id="shutter" class="shutter"></button><button class="flip">↻</button></div>
-    <div id="cameraFlash" class="flash-layer"></div>
-  </div>`;
-  $("#shutter").onclick=()=>{const f=$("#cameraFlash");f.classList.add("flash");setTimeout(()=>f.classList.remove("flash"),200);toast("Photo enregistrée dans Récents.")};
+function wave(){return Array.from({length:18},()=>'<i></i>').join('')}
+function renderWAThread(id){
+  const t=WAThreads[id]; if(!t)return;
+  const msgs=t.messages.map(m=>{
+    if(m[0]==='audio')return `<div class="wa-bubble-line them"><div class="wa-bubble"><div class="wa-audio-card" data-audio-lock="tout"><span class="wa-play">▶</span><div><div class="wa-wave">${wave()}</div><div class="wa-audio-meta">${m[1]} · 2:14</div></div>${avatarHTML(t.avatar,t.name)}</div><small>23:51</small></div></div>`;
+    return `<div class="wa-bubble-line ${m[0]==='me'?'me':'them'}"><div class="wa-bubble">${escapeHTML(m[1])}<small>${m[0]==='me'?'23:50 ✓✓':'23:49'}</small></div></div>`
+  }).join('');
+  openApp(`<div class="wa-thread"><div class="wa-thread-head"><button data-app-back>‹</button>${avatarHTML(t.avatar,t.name)}<div><b>${t.name}</b><small>en ligne</small></div><div class="tools">◉ ☎</div></div><div class="wa-chat">${msgs}</div><div class="wa-input"><div class="box">＋ &nbsp; Message</div><button class="wa-mic">🎙</button></div></div>`);
 }
 
-function renderInstagram(){
-  renderInstagramScreen("maniiProfile");
+function renderFiles(){
+  openApp(`<div class="files-app">${nav('Récents','•••')}<h1 class="section-title">Fichiers</h1><div class="files-block"><div class="file-row" data-file="abeg"><span class="ficon">🎵</span><div><b>ABEG_MASTER.wav</b><span>Audio · protégé</span></div><span class="chev">›</span></div><div class="file-row"><span class="ficon">📁</span><div><b>Exports shooting</b><span>8 éléments</span></div><span class="chev">›</span></div><div class="file-row"><span class="ficon">📄</span><div><b>TRACKLIST_FINAL.pdf</b><span>PDF · 29 oct.</span></div><span class="chev">›</span></div></div></div>`);
 }
-function renderInstagramScreen(screen){
-  const files={
-    maniiProfile:"insta-manii-profile.webp",
-    maniiFollowing:"insta-manii-following.webp",
-    paapiiProfile:"insta-paapii-profile.webp",
-    paapiiFollowing:"insta-paapii-following.webp"
-  };
-  let hotspots="";
-  if(screen==="maniiProfile"){
-    hotspots+=`<button class="hotspot" data-insta-go="maniiFollowing" style="left:52%;top:10%;width:27%;height:10%"></button>`;
-  }else if(screen==="maniiFollowing"){
-    hotspots+=`<button class="hotspot" data-insta-go="paapiiProfile" style="left:0;top:36%;width:100%;height:12%"></button>`;
-    hotspots+=`<button class="hotspot" data-back style="left:0;top:0;width:18%;height:9%"></button>`;
-  }else if(screen==="paapiiProfile"){
-    hotspots+=`<button class="hotspot" data-insta-go="paapiiFollowing" style="left:64%;top:9%;width:23%;height:11%"></button>`;
-  }else if(screen==="paapiiFollowing"){
-    hotspots+=`<button class="hotspot" data-insta-go="maniiProfile" style="left:0;top:16%;width:100%;height:13%"></button>`;
-    hotspots+=`<button class="hotspot" data-back style="left:0;top:0;width:18%;height:9%"></button>`;
-  }
-  appContent.innerHTML=`<div class="insta-wrap">
-    <div class="insta-shot"><img src="assets/images/${files[screen]}" alt="Instagram">${hotspots}</div>
-    <div class="insta-note">Navigation active : ouvre les abonnements/suivis puis clique sur Manii ou Paapii.</div>
-  </div>`;
-  $$("[data-insta-go]",appContent).forEach(b=>b.onclick=()=>{
-    const next=b.dataset.instaGo;
-    if(next==="maniiProfile"||next==="paapiiProfile") stack.push({route:"instascreen",params:{screen:next}});
-    else stack.push({route:"instascreen",params:{screen:next}});
-    renderInstagramScreen(next);
-  });
-  wireCommon();
+function renderFileLock(kind){
+  const cfg=kind==='abeg'?{title:'ABEG_MASTER.wav',hint:'Code à 4 chiffres',code:'1029'}:{title:'tout_gacher.wav',hint:'Mot de passe · 4 lettres',code:'TIME'};
+  openApp(`<div class="lock-file">${nav(cfg.title)}<div class="file-card"><div class="file-icon">🔒</div><h3>Fichier protégé</h3><p>${cfg.hint}</p><div class="code-input"><input id="codeField" inputmode="text" maxlength="4" placeholder="••••"><button data-unlock="${kind}" data-code="${cfg.code}">Déverrouiller</button></div></div></div>`);
 }
+function renderAudio(kind){
+  const cfg=kind==='abeg'?{title:'ABEG',file:'ABEG_MASTER.wav',src:AUDIO.abeg,cover:'assets/images/duo-01.jpg'}:{title:'Tout gâcher',file:'tout_gacher.wav',src:AUDIO.tout,cover:'assets/images/gallery-track-2.png'};
+  openApp(`<div class="audio-player">${nav(cfg.title)}<img class="audio-cover" src="${cfg.cover}" alt=""><h3>Manii & Paapii</h3><p>${cfg.file}</p><div class="progress"><i id="audioProgress"></i></div><div class="controls"><button data-skip="-10">−10</button><button class="play" id="audioPlay">▶</button><button data-skip="10">+10</button></div><audio id="secretAudio" src="${cfg.src}" preload="metadata"></audio></div>`,{dark:false});
+  setTimeout(bindPlayer,0);
+}
+function bindPlayer(){
+  const a=$('#secretAudio'),p=$('#audioPlay'),bar=$('#audioProgress');if(!a||!p)return;
+  p.onclick=()=>{if(a.paused){a.play();p.textContent='Ⅱ'}else{a.pause();p.textContent='▶'}};
+  $$('[data-skip]').forEach(b=>b.onclick=()=>{a.currentTime=Math.max(0,Math.min(a.duration||0,a.currentTime+Number(b.dataset.skip)))})
+  a.ontimeupdate=()=>{bar.style.width=`${a.duration?(a.currentTime/a.duration)*100:0}%`};a.onended=()=>p.textContent='▶';
+}
+
+function renderPhotos(){
+  const imgs=GALLERY.map((src,i)=>`<img src="${src}" data-photo-index="${i}" onerror="this.style.display='none'">`).join('');
+  openApp(`<div class="photos-app"><div class="photo-toolbar"><h1>Photothèque</h1><div style="color:#777;margin-top:3px">Toutes les photos</div></div><div class="gallery-grid">${imgs}</div><div id="photoViewer" class="photo-viewer"><div class="viewer-top"><button data-close-photo>‹</button><span>Aujourd’hui</span><span>•••</span></div><img id="viewerImg"></div></div>`);
+}
+
+function renderNotes(){openApp(`<div class="notes-app">${nav('Notes','•••')}<h1 class="notes-title">Notes</h1><div class="note-card"><b>KAIROS</b><p>Le temps ne prévient pas. Il passe. Le bon moment n’est pas forcément celui qu’on avait prévu.</p></div><div class="note-card"><b>À ne pas oublier</b><p>ABEG — garder la master dans Fichiers.<br>Tout gâcher — envoyé sur WhatsApp.<br>02:43.</p></div><div class="note-card"><b>Tracklist</b><p>Kairos · God Bless · Boulot · Bandite · Vincent Kompany · Interlude · Tu sais · LPB</p></div></div>`)}
+
+function renderCamera(){openApp(`<div class="camera-app"><video id="cameraVideo" src="assets/video/camera.mp4" muted autoplay loop playsinline></video><div class="camera-ui"><div class="cam-top"><span>⚡</span><span>⌃</span><span>◎</span></div><div class="cam-bottom"><span class="thumb"></span><button class="shutter"></button><span class="flip">↻</span></div></div></div>`,{dark:true})}
 
 function renderPhone(){
-  appContent.innerHTML=`<div class="phone-wrap">${nativeHeader("Récents",{back:true})}
-    <h2 class="phone-title">Récents</h2>
-    ${callRow("Paapii","Appel sortant · 6 min","29 oct. · 01:58")}
-    ${callRow("Corentin","Appel manqué","28 oct. · 23:17",true)}
-    ${callRow("Yoan — Zénithal","Appel entrant · 4 min","27 oct.")}
-    ${callRow("Numéro inconnu","Appel manqué","29 oct. · 02:43",true,true)}
-  </div>`;
-  if($("[data-mystery-call]",appContent)) $("[data-mystery-call]",appContent).onclick=()=>show(incomingCall);
-}
-function callRow(name,type,date,miss=false,mystery=false){
-  return `<button class="call-row ${miss?"missed":""}" ${mystery?"data-mystery-call":""} style="width:100%;border:0;background:none;color:#fff;text-align:left">
-    <div class="circle">${name[0]}</div><div class="call-info"><b>${name}</b><small>${type}</small></div><small>${date}</small>
-  </button>`;
+  const rows=[['Paapii','mobile','23:21'],['Corentin','mobile','21:08'],['Numéro inconnu','appel manqué','20:43'],['Yoan','mobile','Hier']].map((r,i)=>`<div class="row"><span class="avatar initial">${r[0][0]}</span><div class="row-copy"><b style="${i===2?'color:#ff3b30':''}">${r[0]}</b><span>${r[1]}</span></div><div class="row-meta">${r[2]} ⓘ</div></div>`).join('');
+  openApp(`<div class="phone-app">${nav('Récents','Modifier')}<h1 class="section-title">Récents</h1><div class="list">${rows}</div><div class="phone-tabs"><span>★<br>Favoris</span><b>◷<br>Récents</b><span>♙<br>Contacts</span><span>⌨<br>Clavier</span><span>◉<br>Messagerie</span></div></div>`)
 }
 
-function renderSafari(){
-  appContent.innerHTML=`<div class="safari-wrap">${nativeHeader("Safari",{light:true,back:true})}
-    <div class="safari-bar">google.com/search?q=kairos+signification</div>
-    ${result("wikipedia.org","Kairos — Wikipédia","Kairos désigne le moment opportun, le bon moment pour agir.")}
-    ${result("google.com","comment récupérer un fichier wav corrompu","Résultats et méthodes de récupération audio.")}
-    ${result("google.com","02:43 signification","Aucun résultat particulièrement utile.")}
-  </div>`;
-}
-function result(domain,title,desc){return `<div class="search-row"><small>${domain}</small><h3>${title}</h3><p>${desc}</p></div>`}
+function renderSettings(){openApp(`<div class="settings-app">${nav('Réglages')}<h1>Réglages</h1><div class="setting-card"><div class="setting-row"><span>Mode Avion</span><span>Non</span></div><div class="setting-row"><span>Wi‑Fi</span><span>Connecté</span></div><div class="setting-row"><span>Bluetooth</span><span>Activé</span></div><div class="setting-row"><span>Données cellulaires</span><span>5G</span></div></div><div class="setting-card"><div class="setting-row"><span>Général</span><span>›</span></div><div class="setting-row"><span>Fond d’écran</span><span>›</span></div><div class="setting-row"><span>Face ID et code</span><span>›</span></div></div></div>`)}
 
-function renderMusic(){
-  const rows=[["KAIROS","Manii & Paapii","duo-01.jpg"],["Bandite","Paapii, Manii","manii-01.jpg"],["Tu sais","Manii & Paapii","paapii-01.jpg"],["La Plus Belle","Manii & Paapii","manii-02.jpg"]];
-  appContent.innerHTML=`<div class="music-wrap">${nativeHeader("Musique",{light:true,back:true})}<h2 class="music-title">Ajouts récents</h2>
-    ${rows.map(r=>`<div class="music-row"><img src="assets/images/${r[2]}"><div><b>${r[0]}</b><small>${r[1]}</small></div></div>`).join("")}
-  </div>`;
-}
 function renderSpotify(){
-  appContent.innerHTML=`<div class="spotify-wrap">${nativeHeader("Spotify",{back:true})}<h2>Bonsoir</h2>
-    ${spotifyCard("KAIROS","Manii & Paapii","duo-01.jpg")}
-    ${spotifyCard("Bandite","Manii & Paapii","manii-01.jpg")}
-    ${spotifyCard("Afro R&B","Mix","paapii-01.jpg")}
-    <div style="margin-top:26px;color:#b3b3b3;font-size:12px">Dernière écoute · 02:43</div>
-  </div>`;
+  const tracks=['KAIROS','GOD BLESS','BOULOT','BANDITE','VINCENT KOMPANY','INTERLUDE','TU SAIS','LPB'];
+  openApp(`<div class="spotify-app"><div class="spotify-hero"><img src="assets/images/gallery-track-1.png"><h1>KAIROS</h1><p>Manii & Paapii · Album · 2026</p></div><div class="spot-actions"><button class="spot-play">▶</button></div>${tracks.map((t,i)=>`<div class="spot-track"><span>${i+1}</span><div><b>${t}</b><small>Manii & Paapii</small></div><span>•••</span></div>`).join('')}</div>`,{dark:true})
 }
-function spotifyCard(t,s,img){return `<div class="spotify-card"><img src="assets/images/${img}"><div><b>${t}</b><small>${s}</small></div></div>`}
-function renderSettings(){
-  appContent.innerHTML=`<div class="settings-wrap">${nativeHeader("Réglages",{light:true,back:true})}
-    <div class="settings-card">
-      ${setting("Nom","KAIROS")}${setting("Modèle","iPhone 16 Pro")}${setting("Version","29.10")}${setting("Capacité","128 Go")}${setting("Disponible","10,29 Go")}
-    </div>
-    <button id="resetProgress" class="reset-btn">Réinitialiser les fichiers cachés</button>
-  </div>`;
-  $("#resetProgress").onclick=()=>{["kairos_abeg","kairos_toutgacher","kairos_call_heard"].forEach(k=>localStorage.removeItem(k));unlocked.abeg=false;unlocked.toutgacher=false;toast("Progression réinitialisée.")};
-}
-function setting(a,b){return `<div class="setting-row"><span>${a}</span><span>${b}</span></div>`}
 
-$("#declineCall").onclick=()=>{localStorage.kairos_call_heard="1";goHome()};
-$("#acceptCall").onclick=()=>{show(activeCall);startCall()};
-$("#hangupCall").onclick=endCall;
-function startCall(){
-  localStorage.kairos_call_heard="1";
-  callSeconds=0;
-  $("#callTimer").textContent="connecté — 00:00";
-  clearInterval(callTimer);
-  callTimer=setInterval(()=>{callSeconds++;$("#callTimer").textContent="connecté — "+String(Math.floor(callSeconds/60)).padStart(2,"0")+":"+String(callSeconds%60).padStart(2,"0")},1000);
-  callAudio.currentTime=0;callAudio.play().catch(()=>toast("Audio d’appel introuvable."));
+function screenshotApp(src,hotspots=[],dark=false){
+  const spots=hotspots.map(h=>`<button class="hotspot" data-hot="${h.action}" style="left:${h.left}%;top:${h.top}%;width:${h.width}%;height:${h.height}%" aria-label="${h.label||''}"></button>`).join('');
+  openApp(`<div class="screen-shot-app"><img class="full-shot" src="${src}" alt="">${spots}</div>`,{dark});
 }
-function endCall(){clearInterval(callTimer);callAudio.pause();goHome()}
-callAudio.onended=()=>setTimeout(endCall,600);
+function renderInstagram(state='manii-profile'){
+  const map={
+    'manii-profile':['assets/images/insta-manii-profile.webp',[{action:'insta-manii-following',left:67,top:16,width:29,height:17,label:'Suivis'}]],
+    'manii-following':['assets/images/insta-manii-following.webp',[{action:'insta-manii-profile',left:0,top:0,width:18,height:10,label:'Retour'},{action:'insta-paapii-profile',left:0,top:34,width:100,height:14,label:'Paapii'}]],
+    'paapii-profile':['assets/images/insta-paapii-profile.webp',[{action:'insta-manii-following',left:0,top:0,width:18,height:10,label:'Retour'},{action:'insta-paapii-following',left:67,top:13,width:28,height:16,label:'Suivis'}]],
+    'paapii-following':['assets/images/insta-paapii-following.webp',[{action:'insta-paapii-profile',left:0,top:0,width:18,height:10,label:'Retour'},{action:'insta-manii-profile',left:0,top:13,width:100,height:13,label:'Manii'}]]
+  };
+  const [src,hs]=map[state];screenshotApp(src,hs,false);
+}
+function renderMusic(state='library'){
+  if(state==='album') screenshotApp('assets/images/apple-kairos.webp',[{action:'music-library',left:0,top:0,width:20,height:12,label:'Retour'}],true);
+  else screenshotApp('assets/images/apple-library.webp',[{action:'music-album',left:0,top:36,width:52,height:24,label:'Kairos'}],false);
+}
+
+function showPassword(kind){
+  const expected=kind==='abeg'?'1029':'TIME';
+  modal.classList.remove('hidden');
+  modal.innerHTML=`<div class="modal-card"><h3>${kind==='abeg'?'ABEG_MASTER.wav':'tout_gacher.wav'}</h3><p>${kind==='abeg'?'Code à 4 chiffres':'Mot de passe à 4 lettres'}</p><input id="modalCode" maxlength="4" autofocus><div class="modal-actions"><button class="cancel" data-modal-close>Annuler</button><button class="ok" data-modal-ok="${kind}" data-code="${expected}">Ouvrir</button></div></div>`;
+  setTimeout(()=>$('#modalCode')?.focus(),50);
+  bindDynamic();
+}
+function closeModal(){modal.classList.add('hidden');modal.innerHTML=''}
+
+function bindDynamic(){
+  $$('[data-app-back]').forEach(b=>b.onclick=()=>{if(routeStack.length){appContent.innerHTML=routeStack.pop();bindDynamic()}else goHome()});
+  $$('[data-msg-thread]').forEach(b=>b.onclick=()=>renderMessageThread(b.dataset.msgThread));
+  $$('[data-wa-thread]').forEach(b=>b.onclick=()=>renderWAThread(b.dataset.waThread));
+  $$('[data-file="abeg"]').forEach(b=>b.onclick=()=>renderFileLock('abeg'));
+  $$('[data-unlock]').forEach(b=>b.onclick=()=>{const v=$('#codeField')?.value.trim().toUpperCase();if(v===b.dataset.code){renderAudio(b.dataset.unlock)}else toast('Code incorrect')});
+  $$('[data-audio-lock]').forEach(b=>b.onclick=()=>showPassword(b.dataset.audioLock));
+  $$('[data-modal-close]').forEach(b=>b.onclick=closeModal);
+  $$('[data-modal-ok]').forEach(b=>b.onclick=()=>{const v=$('#modalCode')?.value.trim().toUpperCase();if(v===b.dataset.code){const k=b.dataset.modalOk;closeModal();renderAudio(k)}else toast('Mot de passe incorrect')});
+  $$('[data-photo-index]').forEach(img=>img.onclick=()=>{const v=$('#photoViewer'),vi=$('#viewerImg');vi.src=GALLERY[Number(img.dataset.photoIndex)];v.classList.add('open')});
+  $$('[data-close-photo]').forEach(b=>b.onclick=()=>$('#photoViewer')?.classList.remove('open'));
+  $$('[data-hot]').forEach(b=>b.onclick=()=>{
+    const a=b.dataset.hot;
+    if(a==='insta-manii-following')renderInstagram('manii-following');
+    if(a==='insta-paapii-profile')renderInstagram('paapii-profile');
+    if(a==='insta-paapii-following')renderInstagram('paapii-following');
+    if(a==='insta-manii-profile')renderInstagram('manii-profile');
+    if(a==='music-album')renderMusic('album');
+    if(a==='music-library')renderMusic('library');
+  });
+}
+
+function route(name){
+  if(name==='messages')return renderMessages();
+  if(name==='photos')return renderPhotos();
+  if(name==='notes')return renderNotes();
+  if(name==='files')return renderFiles();
+  if(name==='camera')return renderCamera();
+  if(name==='music')return renderMusic('library');
+  if(name==='whatsapp')return renderWhatsApp();
+  if(name==='spotify')return renderSpotify();
+  if(name==='instagram')return renderInstagram('manii-profile');
+  if(name==='settings')return renderSettings();
+  if(name==='phone')return renderPhone();
+  if(name==='safari'){window.open(ALBUM_URL,'_blank','noopener');return}
+}
+
+$('#enterBtn').onclick=()=>{intro.classList.remove('active');phoneScene.classList.add('active');setStatus(true);show(lock)};
+$('#unlockBtn').onclick=()=>goHome();
+$('#homeIndicator').onclick=()=>goHome();
+document.addEventListener('click',e=>{const b=e.target.closest('[data-route]');if(b)route(b.dataset.route)});
+
+let startY=null;
+lock.addEventListener('touchstart',e=>startY=e.touches[0].clientY,{passive:true});
+lock.addEventListener('touchend',e=>{if(startY-e.changedTouches[0].clientY>60)goHome()},{passive:true});
