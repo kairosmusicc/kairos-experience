@@ -1,0 +1,72 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover"><title>Les archives de KAIROS</title><link rel="stylesheet" href="styles.css"></head><body>
+<div class="desktop-bg"></div>
+<main id="experience">
+  <section id="intro" class="scene active intro">
+    <img src="assets/images/logo.png" class="intro-logo" alt="Paapii & Manii">
+    <div class="intro-copy">
+      <span class="kicker">KAIROS</span>
+      <h1>Les archives<br>de KAIROS</h1>
+      <p>Une partie des données a été restaurée.</p>
+      <button id="powerBtn" class="cta">Allumer le téléphone</button>
+    </div>
+  </section>
+
+  <section id="phoneScene" class="scene phone-scene">
+    <div class="device" id="device">
+      <div class="dynamic-island"></div>
+      <div class="screen" id="phoneScreen">
+        <div id="lockscreen" class="phone-view lockscreen active-view">
+          <div class="status"><span>02:43</span><span>●●● 100%</span></div>
+          <div class="lock-center">
+            <div class="lock-icon">⌁</div>
+            <div class="lock-date">Jeudi 29 octobre</div>
+            <div class="lock-time">02:43</div>
+            <div class="lock-sub">Tu as trouvé le téléphone de KAIROS.</div>
+          </div>
+          <div class="notifications">
+            <div class="notif"><div class="notif-app green">M</div><div><b>Messages</b><small>Paapii · maintenant</small><p>frérot t’as gardé le fichier ?</p></div></div>
+            <div class="notif"><div class="notif-app blue">P</div><div><b>Photos</b><small>Yoan · 2 min</small><p>Les selects sont prêts.</p></div></div>
+          </div>
+          <button id="unlockBtn" class="swipe">Balayer vers le haut pour ouvrir ↑</button>
+        </div>
+
+        <div id="home" class="phone-view home-view">
+          <div class="status dark"><span id="liveTime">19:47</span><span>●●● 100%</span></div>
+          <div class="app-grid">
+            <button class="app" data-app="messages"><span class="icon messages"><i></i></span><b>Messages</b></button>
+            <button class="app" data-app="photos"><span class="icon photos"><i></i></span><b>Photos</b></button>
+            <button class="app" data-app="notes"><span class="icon notes"><i></i></span><b>Notes</b></button>
+            <button class="app" data-app="voice"><span class="icon voice"><i></i></span><b>Dictaphone</b></button>
+            <button class="app" data-app="files"><span class="icon files"><i></i></span><b>Fichiers</b></button>
+            <button class="app deco"><span class="icon calendar">29</span><b>Calendrier</b></button>
+            <button class="app deco"><span class="icon clock">◷</span><b>Horloge</b></button>
+            <button class="app deco"><span class="icon settings">⚙</span><b>Réglages</b></button>
+          </div>
+          <div class="dock">
+            <span class="icon phone">☎</span><span class="icon messages"><i></i></span><span class="icon files"><i></i></span>
+          </div>
+        </div>
+
+        <div id="appView" class="phone-view app-view">
+          <header><button id="backHome">‹</button><div><small id="appEyebrow"></small><h2 id="appTitle"></h2></div><span></span></header>
+          <div id="appContent" class="app-content"></div>
+        </div>
+
+        <div id="lockFile" class="phone-view lock-file">
+          <header><button id="backFiles">‹</button><div><small>FICHIER PROTÉGÉ</small><h2 id="lockedName">ABEG_MASTER.wav</h2></div><span></span></header>
+          <div class="lock-file-body">
+            <div class="big-lock">⌁</div><p id="lockPrompt">Code à 4 chiffres</p>
+            <form id="codeForm"><input id="codeInput" maxlength="4" autocomplete="off" placeholder="••••"><button>Déverrouiller</button></form>
+            <p id="feedback"></p><button id="hint" class="hint">Indice</button>
+          </div>
+        </div>
+
+        <div id="player" class="phone-view player-view">
+          <header><button id="backPlayer">‹</button><div><small>FICHIER AUDIO</small><h2 id="trackTitle">ABEG</h2></div><span></span></header>
+          <div class="player-body"><div class="album-art"><img src="assets/images/duo-01.jpg"></div><div class="wave"></div><button id="playBtn" class="play">▶</button><p class="audio-note">Audio à ajouter dans <code>assets/audio/</code></p><div id="newFile" class="system-toast hidden">Nouveau fichier récupéré : EXCLU_MANII_PAAPII.wav</div></div>
+        </div>
+      </div>
+    </div>
+  </section>
+</main>
+<script src="app.js"></script></body></html>
