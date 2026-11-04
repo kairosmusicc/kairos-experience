@@ -1,145 +1,127 @@
 <!doctype html>
 <html lang="fr">
 <head>
-  <meta charset="utf-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
-  <meta name="theme-color" content="#050505" />
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
+  <meta name="theme-color" content="#000">
   <title>Les archives de KAIROS</title>
-  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="styles.css">
 </head>
 <body>
-  <div class="desktop-bg"></div>
-
   <main id="experience">
     <section id="intro" class="scene active intro">
-      <img src="assets/images/logo.png" class="intro-logo" alt="Manii & Paapii" />
-      <div class="intro-copy">
-        <span class="kicker">29.10.26 — 02:43</span>
+      <div class="intro-card">
+        <img src="assets/images/logo.png" class="intro-logo" alt="Manii & Paapii">
+        <span class="intro-kicker">29.10.26 — 02:43</span>
         <h1>Les archives<br>de KAIROS</h1>
-        <p>Un téléphone. Des traces. Deux fichiers qui n'auraient pas dû rester là.</p>
-        <button id="powerBtn" class="cta">Allumer le téléphone</button>
+        <p>Un téléphone a été retrouvé. Certaines données sont encore accessibles.</p>
+        <button id="powerBtn" class="primary-btn">Allumer le téléphone</button>
       </div>
     </section>
 
     <section id="phoneScene" class="scene phone-scene">
-      <div class="device" id="device">
-        <div class="dynamic-island"></div>
-        <div class="screen" id="phoneScreen">
+      <div class="device">
+        <div class="screen">
+          <div class="dynamic-island"></div>
+          <div class="statusbar">
+            <span>02:43</span>
+            <div class="status-icons"><span class="signal">▮▮▮</span><span>◒</span><span class="battery">100%</span></div>
+          </div>
 
-          <section id="lockscreen" class="phone-view lockscreen active-view">
-            <div class="status status-light"><span>02:43</span><span>▮▮▮ 100%</span></div>
-            <div class="lock-center">
+          <section id="lockscreen" class="view lockscreen active-view">
+            <div class="lock-main">
+              <div class="lock-dot">●</div>
               <div class="lock-date">Jeudi 29 octobre</div>
               <div class="lock-time">02:43</div>
               <div class="lock-sub">Tu as trouvé le téléphone de KAIROS.</div>
             </div>
-            <div class="notifications">
-              <button class="notif" data-open="messages">
-                <img src="assets/icons/message.png" alt="" />
-                <div><b>Messages</b><small>Paapii · maintenant</small><p>frérot t’as gardé le fichier ?</p></div>
+
+            <div class="lock-notifs">
+              <button class="notif" data-route="messages">
+                <img src="assets/icons/messages.png" alt="">
+                <div class="notif-copy">
+                  <div class="notif-head"><b>Messages</b><span>maintenant</span></div>
+                  <strong>Paapii</strong>
+                  <p>frérot t’as gardé le fichier ?</p>
+                </div>
               </button>
-              <button class="notif" data-open="photos">
-                <img src="assets/icons/photo.png" alt="" />
-                <div><b>Photos</b><small>Yoan · 2 min</small><p>Les selects sont prêts.</p></div>
+              <button class="notif" data-route="photos">
+                <img src="assets/icons/photos.png" alt="">
+                <div class="notif-copy">
+                  <div class="notif-head"><b>Photos</b><span>2 min</span></div>
+                  <strong>Yoan</strong>
+                  <p>Les selects sont prêts.</p>
+                </div>
               </button>
             </div>
-            <button id="unlockBtn" class="swipe">Balayer vers le haut pour ouvrir ↑</button>
+
+            <button id="unlockBtn" class="unlock">Balayer vers le haut pour ouvrir ↑</button>
           </section>
 
-          <section id="home" class="phone-view home-view">
-            <div class="status status-light"><span id="liveTime">02:43</span><span>▮▮▮ 100%</span></div>
-            <div class="home-title"><small>KAIROS</small><b>29.10</b></div>
+          <section id="home" class="view home-view">
+            <div class="app-grid">
+              <button class="app" data-route="messages"><img src="assets/icons/messages.png"><span>Messages</span></button>
+              <button class="app" data-route="photos"><img src="assets/icons/photos.png"><span>Photos</span></button>
+              <button class="app" data-route="notes"><img src="assets/icons/notes.png"><span>Notes</span></button>
+              <button class="app" data-route="files"><img src="assets/icons/files.png"><span>Fichiers</span></button>
 
-            <div class="app-grid" id="appGrid">
-              <button class="app" data-app="messages"><span class="app-icon"><img src="assets/icons/message.png" alt="Messages"></span><b>Messages</b></button>
-              <button class="app" data-app="photos"><span class="app-icon"><img src="assets/icons/photo.png" alt="Photos"></span><b>Photos</b></button>
-              <button class="app" data-app="notes"><span class="app-icon"><img src="assets/icons/Notes.png" alt="Notes"></span><b>Notes</b></button>
-              <button class="app" data-app="files"><span class="app-icon fallback files-icon">▱</span><b>Fichiers</b></button>
+              <button class="app" data-route="camera"><img src="assets/icons/camera.png"><span>Appareil photo</span></button>
+              <button class="app" data-route="music"><img src="assets/icons/music.png"><span>Musique</span></button>
+              <button class="app badge" data-route="whatsapp"><img src="assets/icons/whatsapp.png"><em>1</em><span>WhatsApp</span></button>
+              <button class="app" data-route="spotify"><img src="assets/icons/spotify.png"><span>Spotify</span></button>
 
-              <button class="app" data-app="camera"><span class="app-icon"><img src="assets/icons/camera.png" alt="Appareil photo"></span><b>Appareil photo</b></button>
-              <button class="app" data-app="music"><span class="app-icon"><img src="assets/icons/musique.png" alt="Musique"></span><b>Musique</b></button>
-              <button class="app" data-app="whatsapp"><span class="app-icon badge-wrap"><img src="assets/icons/whatsapp.png" alt="WhatsApp"><em>1</em></span><b>WhatsApp</b></button>
-              <button class="app" data-app="spotify"><span class="app-icon"><img src="assets/icons/spotify.png" alt="Spotify"></span><b>Spotify</b></button>
-
-              <button class="app" data-app="instagram"><span class="app-icon"><img src="assets/icons/instagram.png" alt="Instagram"></span><b>Instagram</b></button>
-              <button class="app" data-app="settings"><span class="app-icon fallback settings-icon">⚙︎</span><b>Réglages</b></button>
+              <button class="app" data-route="instagram"><img src="assets/icons/instagram.png"><span>Instagram</span></button>
+              <button class="app" data-route="settings"><img src="assets/icons/settings.png"><span>Réglages</span></button>
             </div>
 
             <div class="dock">
-              <button class="dock-app" data-app="phone"><span class="app-icon"><img src="assets/icons/téléphone.png" alt="Téléphone"></span></button>
-              <button class="dock-app" data-app="messages"><span class="app-icon"><img src="assets/icons/message.png" alt="Messages"></span></button>
-              <button class="dock-app" data-app="safari"><span class="app-icon"><img src="assets/icons/safari.png" alt="Safari"></span></button>
-              <button class="dock-app" data-app="music"><span class="app-icon"><img src="assets/icons/musique.png" alt="Musique"></span></button>
+              <button data-route="phone"><img src="assets/icons/phone.png"></button>
+              <button data-route="messages"><img src="assets/icons/messages.png"></button>
+              <button data-route="safari"><img src="assets/icons/safari.png"></button>
+              <button data-route="music"><img src="assets/icons/music.png"></button>
+              <button data-route="whatsapp"><img src="assets/icons/whatsapp.png"></button>
             </div>
           </section>
 
-          <section id="appView" class="phone-view app-view">
-            <header class="app-header">
-              <button id="backHome" aria-label="Retour">‹</button>
-              <div><small id="appEyebrow">KAIROS</small><h2 id="appTitle">App</h2></div>
-              <span></span>
-            </header>
+          <section id="appView" class="view app-view">
             <div id="appContent" class="app-content"></div>
           </section>
 
-          <section id="lockFile" class="phone-view lock-file">
-            <header class="app-header">
-              <button id="backLocked">‹</button>
-              <div><small>FICHIER PROTÉGÉ</small><h2 id="lockedName">ABEG_MASTER.wav</h2></div>
-              <span></span>
-            </header>
-            <div class="lock-file-body">
-              <div class="big-lock">⌁</div>
-              <p id="lockPrompt">Code à 4 chiffres</p>
-              <form id="codeForm"><input id="codeInput" maxlength="4" autocomplete="off" placeholder="••••"><button>Déverrouiller</button></form>
-              <p id="feedback"></p>
-              <button id="hint" class="hint">Indice</button>
+          <section id="incomingCall" class="view call-view">
+            <div class="call-bg"></div>
+            <div class="call-copy">
+              <span>appel entrant</span>
+              <h2>Numéro inconnu</h2>
+              <p>peut-être : KAIROS</p>
             </div>
-          </section>
-
-          <section id="player" class="phone-view player-view">
-            <header class="app-header">
-              <button id="backPlayer">‹</button>
-              <div><small>FICHIER AUDIO</small><h2 id="trackTitle">ABEG</h2></div>
-              <span></span>
-            </header>
-            <div class="player-body">
-              <div class="album-art"><img id="playerArt" src="assets/images/duo-01.jpg" alt=""></div>
-              <div class="track-meta"><b id="playerArtist">Manii & Paapii</b><small id="playerFileName">ABEG_MASTER.wav</small></div>
-              <div class="progress"><i id="progressFill"></i></div>
-              <div class="player-controls"><button id="rewindBtn">−10</button><button id="playBtn" class="play">▶</button><button id="forwardBtn">+10</button></div>
-              <audio id="audioPlayer" preload="metadata"></audio>
-              <div id="newFile" class="system-toast hidden">1 élément supplémentaire détecté.</div>
-            </div>
-          </section>
-
-          <section id="incomingCall" class="phone-view call-screen">
-            <div class="call-status">appel entrant</div>
-            <h2 id="callName">Numéro inconnu</h2>
-            <p id="callSubtitle">peut-être : KAIROS</p>
             <div class="call-actions">
-              <button id="declineCall" class="call-circle decline">×<span>Refuser</span></button>
-              <button id="acceptCall" class="call-circle accept">☎<span>Accepter</span></button>
+              <button id="declineCall" class="call-btn decline"><i>×</i><span>Refuser</span></button>
+              <button id="acceptCall" class="call-btn accept"><i>☎</i><span>Accepter</span></button>
             </div>
           </section>
 
-          <section id="activeCall" class="phone-view call-screen active-call">
-            <div class="call-status" id="activeCallStatus">connecté — 00:00</div>
-            <h2>Numéro inconnu</h2>
-            <p>peut-être : KAIROS</p>
+          <section id="activeCall" class="view call-view">
+            <div class="call-bg"></div>
+            <div class="call-copy">
+              <span id="callTimer">connecté — 00:00</span>
+              <h2>Numéro inconnu</h2>
+              <p>peut-être : KAIROS</p>
+            </div>
             <div class="call-pad">
-              <span>◉<small>silence</small></span><span>⌨<small>clavier</small></span><span>●<small>haut-parleur</small></span>
+              <button><i>◉</i><span>silence</span></button>
+              <button><i>⌨</i><span>clavier</span></button>
+              <button><i>◖</i><span>haut-parleur</span></button>
             </div>
             <button id="hangupCall" class="hangup">☎</button>
-            <audio id="callAudio" preload="metadata"><source src="assets/audio/call-0243.wav" type="audio/wav"><source src="assets/audio/call-0243.mp3" type="audio/mpeg"></audio>
+            <audio id="callAudio" preload="metadata" src="assets/audio/call-0243.wav"></audio>
           </section>
 
+          <button id="homeGesture" class="home-gesture" aria-label="Accueil"></button>
           <div id="toast" class="toast hidden"></div>
         </div>
       </div>
     </section>
   </main>
-
   <script src="app.js"></script>
 </body>
 </html>
