@@ -1,262 +1,1569 @@
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => [...r.querySelectorAll(s)];
+const intro = $("#intro"),
+  phoneScene = $("#phoneScene"),
+  lock = $("#lock"),
+  home = $("#home"),
+  appView = $("#appView"),
+  appContent = $("#appContent"),
+  device = $("#device"),
+  statusBar = $("#statusBar"),
+  modal = $("#modal"),
+  toastEl = $("#toast"),
+  screen = $(".screen");
+// Session state is separate from rendered views. Storage may be unavailable in private browsers.
+const session = {
+  get(key) {
+    try {
+      return sessionStorage.getItem(key);
+    } catch {
+      return null;
+    }
+  },
+  set(key, value) {
+    try {
+      sessionStorage.setItem(key, value);
+    } catch {}
+  },
+};
+const state = {
+  phoneUnlocked: false,
+  currentApp: null,
+  currentView: null,
+  navigationStack: [],
+  callHandled: session.get("kairos.callHandled") === "1",
+  callStatus: "idle",
+  abegUnlocked: session.get("kairos.abeg") === "1",
+  toutGacherUnlocked: session.get("kairos.tout") === "1",
+  attempts: { abeg: 0, tout: 0 },
+  messages: {},
+  read: new Set(),
+  photoIndex: 0,
+  musicState: null,
+};
+let callTimer = null,
+  callStartedAt = 0,
+  callInterval = null;
+function navigate(renderer, ...args) {
+  if (state.currentView) state.navigationStack.push(state.currentView);
+  state.currentView = { renderer, args };
+  renderer(...args);
+}
+function unlockPhone() {
+  state.phoneUnlocked = true;
+  scheduleIncomingCall();
+  goHome();
+}
 
-const $=(s,r=document)=>r.querySelector(s);
-const $$=(s,r=document)=>[...r.querySelectorAll(s)];
-const intro=$('#intro'),phoneScene=$('#phoneScene'),lock=$('#lock'),home=$('#home'),appView=$('#appView'),appContent=$('#appContent'),device=$('#device'),statusBar=$('#statusBar'),modal=$('#modal'),toastEl=$('#toast'),screen=$('.screen');
-let routeStack=[],callTimer=null,callHandled=false,callStartedAt=0,callInterval=null;
-const ALBUM_URL='https://album.link/qzsdrsh5r3m8j';
-const AUDIO={abeg:'assets/audio/abeg.wav',tout:'assets/audio/tout_gacher.wav',call:'assets/audio/call-0243.wav'};
-const GALLERY=[
-  'assets/images/manii-01.jpg','assets/images/manii-02.jpg','assets/images/duo-01.jpg','assets/images/paapii-01.jpg',
-  'assets/images/lockscreen-cicatrices.png','assets/images/IMG_2207-2.png','assets/images/gallery-studio.jpg','assets/images/gallery-kid.jpg',
-  'assets/images/gallery-cat.jpg','assets/images/gallery-track-1.png','assets/images/gallery-track-2.png','assets/images/gallery-track-3.png',
-  'assets/images/gallery-track-4.png','assets/images/gallery-track-5.png','assets/images/home-wallpaper.jpg'
+const ALBUM_URL = "https://album.link/qzsdrsh5r3m8j";
+const AUDIO = {
+  abeg: "assets/audio/abeg.wav",
+  tout: "assets/audio/tout_gacher.wav",
+  call: "assets/audio/call-0243.wav",
+};
+const GALLERY = [
+  "assets/images/manii-01.jpg",
+  "assets/images/manii-02.jpg",
+  "assets/images/duo-01.jpg",
+  "assets/images/paapii-01.jpg",
+  "assets/images/lockscreen-cicatrices.png",
+  "assets/images/IMG_2207-2.png",
+  "assets/images/gallery-studio.jpg",
+  "assets/images/gallery-kid.jpg",
+  "assets/images/gallery-cat.jpg",
+  "assets/images/gallery-track-1.png",
+  "assets/images/gallery-track-2.png",
+  "assets/images/gallery-track-3.png",
+  "assets/images/gallery-track-4.png",
+  "assets/images/gallery-track-5.png",
+  "assets/images/home-wallpaper.jpg",
 ];
 
-const IMessageThreads={
-  paapii:{name:'Paapii',avatar:'assets/images/paapii-01.jpg',preview:'le code c’est tjrs le même ?',offset:7,messages:[
-    ['them','t’as gardé le bounce d’abeg ?'],['me','ouais dans Fichiers'],['them','le code c’est tjrs le même ?'],['me','j’ai oublié mdrr'],['them','la date du projet'],['me','29/10 ?'],['them','retourne-la.']
-  ]},
-  corentin:{name:'Corentin',avatar:'assets/images/gallery-kid.jpg',preview:'planning validé ✅',offset:29,messages:[
-    ['them','planning validé ✅'],['me','parfait'],['them','on garde les deux exclus hors du dossier public'],['me','oui'],['them','je fais le point demain avec vous deux']
-  ]},
-  yoan:{name:'Yoan — Zénithal',avatar:'assets/images/gallery-studio.jpg',preview:'je vous renvoie les exports',offset:74,messages:[
-    ['them','je vous renvoie les exports'],['me','lourd merci'],['them','j’ai aussi gardé quelques photos du shooting'],['me','mets-les dans le tel']
-  ]},
-  redka:{name:'Redka',avatar:'assets/images/gallery-cat.jpg',preview:'le bounce est propre',offset:106,messages:[
-    ['them','le bounce est propre'],['me','ça marche'],['them','j’ai juste resserré l’intro'],['me','parfait']
-  ]}
+const IMessageThreads = {
+  paapii: {
+    name: "Paapii",
+    avatar: "assets/images/paapii-01.jpg",
+    preview: "retourne-la.",
+    offset: 7,
+    messages: [
+      ["them", "t’as gardé le bounce d’abeg ?"],
+      ["me", "ouais dans Fichiers"],
+      ["them", "le code c’est tjrs le même ?"],
+      ["me", "j’ai oublié mdrr"],
+      ["them", "la date du projet"],
+      ["me", "29/10 ?"],
+      ["them", "retourne-la."],
+    ],
+  },
+  corentin: {
+    name: "Corentin",
+    avatar: "assets/images/gallery-kid.jpg",
+    preview: "planning validé ✅",
+    offset: 29,
+    messages: [
+      ["them", "planning validé ✅"],
+      ["me", "parfait"],
+      ["them", "on garde les deux exclus hors du dossier public"],
+      ["me", "oui"],
+      ["them", "je fais le point demain avec vous deux"],
+    ],
+  },
+  yoan: {
+    name: "Yoan — Zénithal",
+    avatar: "assets/images/gallery-studio.jpg",
+    preview: "je vous renvoie les exports",
+    offset: 74,
+    messages: [
+      ["them", "je vous renvoie les exports"],
+      ["me", "lourd merci"],
+      ["them", "j’ai aussi gardé quelques photos du shooting"],
+      ["me", "mets-les dans le tel"],
+    ],
+  },
+  redka: {
+    name: "Redka",
+    avatar: "assets/images/gallery-cat.jpg",
+    preview: "le bounce est propre",
+    offset: 106,
+    messages: [
+      ["them", "le bounce est propre"],
+      ["me", "ça marche"],
+      ["them", "j’ai juste resserré l’intro"],
+      ["me", "parfait"],
+    ],
+  },
 };
-const WAThreads={
-  paapii:{name:'Paapii',avatar:'assets/images/paapii-01.jpg',preview:'j’ai retrouvé le mix',offset:4,unread:1,messages:[
-    ['them','frérot'],['them','j’ai retrouvé le mix qu’on devait pas mettre dans le dossier'],['me','tout gâcher ?'],['them','oui'],['audio','tout_gacher.wav'],['me','le mdp ?'],['them','4 lettres. c’est littéralement le thème du projet 💀']
-  ]},
-  kairos:{name:'KAIROS',avatar:'assets/images/duo-01.jpg',preview:'Corentin : planning validé ✅',offset:27,messages:[['them','Corentin : planning validé ✅'],['me','on est bons'],['them','Yoan : je vous renvoie les exports ce soir']]},
-  corentin:{name:'Corentin',avatar:'assets/images/gallery-kid.jpg',preview:'on fait le point demain',offset:59,messages:[['them','on fait le point demain'],['me','ça marche'],['them','je vous envoie la dernière checklist avant midi']]},
-  yoan:{name:'Yoan',avatar:'assets/images/gallery-studio.jpg',preview:'je vous renvoie les exports',offset:121,messages:[['them','je vous renvoie les exports'],['me','merci frère'],['them','les selects photo aussi']]}
+const WAThreads = {
+  paapii: {
+    name: "Paapii",
+    avatar: "assets/images/paapii-01.jpg",
+    preview: "tu le connais déjà",
+    offset: 4,
+    unread: 1,
+    messages: [
+      ["them", "frérot"],
+      [
+        "them",
+        "j’ai retrouvé un truc qu’on avait dit de pas mettre dans le dossier",
+      ],
+      ["me", "quoi ?"],
+      ["file", "tout_gacher.wav"],
+      ["me", "mais t’avais pas supprimé ça ?"],
+      ["them", "apparemment non 💀"],
+      ["me", "le fichier est verrouillé"],
+      ["them", "normal"],
+      ["me", "le mdp ?"],
+      ["them", "4 lettres"],
+      ["them", "tu le connais déjà"],
+    ],
+  },
+  kairos: {
+    name: "KAIROS",
+    avatar: "assets/images/duo-01.jpg",
+    preview: "Corentin : planning validé ✅",
+    offset: 27,
+    messages: [
+      ["them", "Corentin : planning validé ✅"],
+      ["me", "on est bons"],
+      ["them", "Yoan : je vous renvoie les exports ce soir"],
+    ],
+  },
+  corentin: {
+    name: "Corentin",
+    avatar: "assets/images/gallery-kid.jpg",
+    preview: "on fait le point demain",
+    offset: 59,
+    messages: [
+      ["them", "on fait le point demain"],
+      ["me", "ça marche"],
+      ["them", "je vous envoie la dernière checklist avant midi"],
+    ],
+  },
+  yoan: {
+    name: "Yoan",
+    avatar: "assets/images/gallery-studio.jpg",
+    preview: "je vous renvoie les exports",
+    offset: 121,
+    messages: [
+      ["them", "je vous renvoie les exports"],
+      ["me", "merci frère"],
+      ["them", "les selects photo aussi"],
+    ],
+  },
 };
 
-function pad(n){return String(n).padStart(2,'0')}
-function clock(offset=0){const d=new Date(Date.now()-offset*60000);return `${pad(d.getHours())}:${pad(d.getMinutes())}`}
-function syncClock(){
-  const d=new Date(),time=`${pad(d.getHours())}:${pad(d.getMinutes())}`;
-  $('#statusTime').textContent=time; $('#lockTime').textContent=time;
-  const days=['Dimanche','Lundi','Mardi','Mercredi','Jeudi','Vendredi','Samedi'],months=['janvier','février','mars','avril','mai','juin','juillet','août','septembre','octobre','novembre','décembre'];
-  $('#lockDate').textContent=`${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
-  const cal=$('#calendarDay'); if(cal)cal.textContent=d.getDate();
+function pad(n) {
+  return String(n).padStart(2, "0");
 }
-syncClock();setInterval(syncClock,10000);
-if(navigator.getBattery){navigator.getBattery().then(b=>{const update=()=>$('#batteryLevel').textContent=Math.round(b.level*100);update();b.addEventListener('levelchange',update)}).catch(()=>{})}
+function clock(offset = 0) {
+  const d = new Date(Date.now() - offset * 60000);
+  return `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+function syncClock() {
+  const d = new Date(),
+    time = `${pad(d.getHours())}:${pad(d.getMinutes())}`;
+  $("#statusTime").textContent = time;
+  $("#lockTime").textContent = time;
+  const days = [
+      "Dimanche",
+      "Lundi",
+      "Mardi",
+      "Mercredi",
+      "Jeudi",
+      "Vendredi",
+      "Samedi",
+    ],
+    months = [
+      "janvier",
+      "février",
+      "mars",
+      "avril",
+      "mai",
+      "juin",
+      "juillet",
+      "août",
+      "septembre",
+      "octobre",
+      "novembre",
+      "décembre",
+    ];
+  $("#lockDate").textContent =
+    `${days[d.getDay()]} ${d.getDate()} ${months[d.getMonth()]}`;
+  const cal = $("#calendarDay");
+  if (cal) cal.textContent = d.getDate();
+  $(".calendar-icon small").textContent = d
+    .toLocaleDateString("fr-FR", { weekday: "short" })
+    .toUpperCase();
+  $$("[data-clock]").forEach(
+    (el) => (el.textContent = clock(Number(el.dataset.clock))),
+  );
+}
+syncClock();
+setInterval(syncClock, 10000);
+if (navigator.getBattery) {
+  navigator
+    .getBattery()
+    .then((b) => {
+      const update = () =>
+        ($("#batteryLevel").textContent = Math.round(b.level * 100));
+      update();
+      b.addEventListener("levelchange", update);
+    })
+    .catch(() => {});
+}
 
-function icon(name){
-  const paths={
-    video:'<rect x="2" y="5" width="14" height="14" rx="3"/><path d="M16 9l6-3v12l-6-3z"/>',
-    phone:'<path d="M6.6 2.7l3.1 3.1-2 3.2c1.8 3.3 4.1 5.6 7.4 7.4l3.1-2 3.1 3.1-2.1 3.5c-.6 1-1.7 1.5-2.9 1.2C8.6 20.4 3.6 15.4 1.8 7.7 1.5 6.5 2 5.4 3 4.8z"/>',
-    info:'<circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/>',
-    compose:'<path d="M4 20l4.5-1 10-10-3.5-3.5-10 10L4 20zM14 6l3.5 3.5M13 20h7"/>',
-    search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/>',
-    plus:'<path d="M12 5v14M5 12h14"/>',
-    mic:'<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
-    camera:'<path d="M4 7h3l1.5-2h7L17 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><circle cx="12" cy="13" r="4"/>',
-    back:'<path d="M15 5l-7 7 7 7"/>',
-    play:'<path d="M8 5l11 7-11 7z"/>',
-    recent:'<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
-    contacts:'<circle cx="12" cy="8" r="3"/><path d="M6 20c.5-4 2.5-6 6-6s5.5 2 6 6"/>',
-    keypad:'<path d="M7 6h.01M12 6h.01M17 6h.01M7 11h.01M12 11h.01M17 11h.01M7 16h.01M12 16h.01M17 16h.01"/>',
-    star:'<path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
-    voicemail:'<circle cx="7" cy="12" r="4"/><circle cx="17" cy="12" r="4"/><path d="M7 16h10"/>',
-    flash:'<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>',
-    rotate:'<path d="M20 7v5h-5M4 17v-5h5M18 12a7 7 0 0 0-12-4M6 12a7 7 0 0 0 12 4"/>'
+function icon(name) {
+  const paths = {
+    music:
+      '<path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/>',
+    pause: '<path d="M9 5v14M15 5v14"/>',
+    next: '<path d="m5 5 11 7-11 7zM19 5v14"/>',
+    previous: '<path d="m19 5-11 7 11 7zM5 5v14"/>',
+    shuffle:
+      '<path d="M3 6h3c5 0 7 12 12 12h3m-4-4 4 4-4 4M3 18h3c2 0 3-2 4-4m4-4c1-2 2-4 4-4h3m-4-4 4 4-4 4"/>',
+    ellipsis:
+      '<circle cx="5" cy="12" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="19" cy="12" r="1"/>',
+    share: '<path d="M12 15V2m-4 4 4-4 4 4M7 9H4v12h16V9h-3"/>',
+    speaker:
+      '<path d="M4 9h4l5-4v14l-5-4H4zM16 8c3 2 3 6 0 8m3-11c5 4 5 10 0 14"/>',
+    file: '<path d="M5 3h9l5 5v13H5zM14 3v6h5M9 13h6M9 17h6"/>',
+    folder: '<path d="M3 6h7l2 3h9v12H3z"/>',
+    lock: '<rect x="5" y="10" width="14" height="11" rx="3"/><path d="M8 10V7a4 4 0 0 1 8 0v3M12 14v3"/>',
+    pin: '<path d="m9 3 6 0-1 6 4 4H6l4-4zM12 13v8"/>',
+    close: '<path d="m6 6 12 12M6 18 18 6"/>',
+    send: '<path d="M12 20V4m-6 6 6-6 6 6"/>',
+    check: '<path d="m5 12 4 4 10-10"/>',
+    video:
+      '<rect x="2" y="5" width="14" height="14" rx="3"/><path d="M16 9l6-3v12l-6-3z"/>',
+    phone:
+      '<path d="M6.6 2.7l3.1 3.1-2 3.2c1.8 3.3 4.1 5.6 7.4 7.4l3.1-2 3.1 3.1-2.1 3.5c-.6 1-1.7 1.5-2.9 1.2C8.6 20.4 3.6 15.4 1.8 7.7 1.5 6.5 2 5.4 3 4.8z"/>',
+    info: '<circle cx="12" cy="12" r="9"/><path d="M12 10v6M12 7h.01"/>',
+    compose:
+      '<path d="M4 20l4.5-1 10-10-3.5-3.5-10 10L4 20zM14 6l3.5 3.5M13 20h7"/>',
+    search: '<circle cx="10.5" cy="10.5" r="6.5"/><path d="M15.5 15.5L21 21"/>',
+    plus: '<path d="M12 5v14M5 12h14"/>',
+    mic: '<rect x="9" y="3" width="6" height="11" rx="3"/><path d="M5 11a7 7 0 0 0 14 0M12 18v3"/>',
+    camera:
+      '<path d="M4 7h3l1.5-2h7L17 7h3a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V9a2 2 0 0 1 2-2z"/><circle cx="12" cy="13" r="4"/>',
+    back: '<path d="M15 5l-7 7 7 7"/>',
+    play: '<path d="M8 5l11 7-11 7z"/>',
+    recent: '<circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 2"/>',
+    contacts:
+      '<circle cx="12" cy="8" r="3"/><path d="M6 20c.5-4 2.5-6 6-6s5.5 2 6 6"/>',
+    keypad:
+      '<path d="M7 6h.01M12 6h.01M17 6h.01M7 11h.01M12 11h.01M17 11h.01M7 16h.01M12 16h.01M17 16h.01"/>',
+    star: '<path d="M12 3l2.6 5.3 5.9.9-4.3 4.1 1 5.8-5.2-2.7-5.2 2.7 1-5.8-4.3-4.1 5.9-.9z"/>',
+    voicemail:
+      '<circle cx="7" cy="12" r="4"/><circle cx="17" cy="12" r="4"/><path d="M7 16h10"/>',
+    flash: '<path d="M13 2L5 14h6l-1 8 8-12h-6z"/>',
+    rotate:
+      '<path d="M20 7v5h-5M4 17v-5h5M18 12a7 7 0 0 0-12-4M6 12a7 7 0 0 0 12 4"/>',
   };
-  return `<svg class="ui" viewBox="0 0 24 24" aria-hidden="true">${paths[name]||''}</svg>`;
+  return `<svg class="ui" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths[name] || ""}</svg>`;
 }
-function setStatus(dark=false){statusBar.className='status-bar '+(dark?'dark-status':'light-status');device.classList.toggle('dark-ui',dark)}
-function show(v){$$('.view').forEach(x=>x.classList.remove('active-view'));v.classList.add('active-view')}
-function goHome(){routeStack=[];setStatus(true);show(home);appContent.innerHTML=''}
-function openApp(html,{dark=false,push=true}={}){if(push&&appContent.innerHTML)routeStack.push(appContent.innerHTML);setStatus(dark);appContent.innerHTML=html;show(appView);bindDynamic()}
-function goBack(){if(routeStack.length){appContent.innerHTML=routeStack.pop();bindDynamic()}else goHome()}
-function toast(msg,ms=1700){toastEl.textContent=msg;toastEl.classList.remove('hidden');clearTimeout(toast._t);toast._t=setTimeout(()=>toastEl.classList.add('hidden'),ms)}
-function escapeHTML(s=''){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]))}
-function avatarHTML(src,name=''){return src?`<img class="avatar" src="${src}" alt="">`:`<span class="avatar initial">${escapeHTML(name[0]||'?')}</span>`}
-function nav(title,right=''){return `<div class="ios-nav"><button class="back" data-app-back>${icon('back')}</button><h2>${title}</h2><button class="action">${right}</button></div>`}
-
-/* MESSAGES */
-function renderMessages(){
-  const rows=Object.entries(IMessageThreads).map(([id,t],i)=>`<div class="row" data-msg-thread="${id}">${avatarHTML(t.avatar,t.name)}<div class="row-copy"><b>${t.name}</b><span>${i===0?'<span class="blue-dot"></span> ':''}${t.preview}</span></div><div class="row-meta">${clock(t.offset)}</div></div>`).join('');
-  openApp(`<div class="messages-app">
-    <div class="messages-toolbar"><span class="filters">Filtres</span><h1>Messages</h1><button class="compose-glass">${icon('compose')}</button></div>
-    <div class="list">${rows}</div>
-    <div class="messages-bottom-search">${icon('search')}<span>Rechercher</span></div>
-  </div>`);
+function setStatus(dark = false) {
+  statusBar.className = "status-bar " + (dark ? "dark-status" : "light-status");
+  device.classList.toggle("dark-ui", dark);
 }
-function renderMessageThread(id){
-  const t=IMessageThreads[id];if(!t)return;
-  const base=t.offset+t.messages.length;
-  const msgs=t.messages.map((m,i)=>`${i===0?`<div class="time-label">Aujourd’hui ${clock(base)}</div>`:''}<div class="bubble-line ${m[0]==='me'?'me':'them'}"><div class="bubble">${escapeHTML(m[1])}</div></div>`).join('');
-  openApp(`<div class="thread-wrap">
-    <div class="thread-head">
-      <button class="back" data-app-back>${icon('back')}</button>
-      <div class="thread-person">${avatarHTML(t.avatar,t.name)}<b>${t.name} ›</b></div>
-      <div class="thread-tools"><button class="icon-glass">${icon('video')}</button><button class="icon-glass">${icon('phone')}</button></div>
-    </div>
-    <div class="bubble-area">${msgs}</div>
-    <div class="imessage-compose"><button>${icon('plus')}</button><div class="field">iMessage</div><button>${icon('mic')}</button></div>
-  </div>`);
+function show(v) {
+  $$(".view").forEach((x) => x.classList.remove("active-view"));
+  v.classList.add("active-view");
 }
-
-/* WHATSAPP */
-function renderWhatsApp(){
-  const order=['paapii','kairos','corentin','yoan'];
-  const rows=order.map(id=>{const t=WAThreads[id];return `<div class="row wa-row" data-wa-thread="${id}">${avatarHTML(t.avatar,t.name)}<div class="row-copy"><b>${t.name}</b><span>${id==='kairos'?'<span class="checks">✓✓</span> ':''}${t.preview}</span></div><div class="row-meta">${clock(t.offset)}${t.unread?`<span class="green-badge">${t.unread}</span>`:''}</div></div>`}).join('');
-  openApp(`<div class="wa-app">
-    <div class="wa-top"><span class="edit">Modifier</span><h1>Discussions</h1><div class="wa-top-actions"><button class="icon-glass">${icon('camera')}</button><button class="icon-glass">${icon('plus')}</button></div></div>
-    <div class="wa-search">${icon('search')} &nbsp; Rechercher</div>
-    <div class="chip-row"><span class="chip active">Toutes</span><span class="chip">Non lues 1</span><span class="chip">Favoris</span><span class="chip">Groupes 1</span></div>
-    <div class="list">${rows}</div>
-  </div>`);
+function goHome() {
+  if (state.callStatus !== "idle") return;
+  if (!state.phoneUnlocked) return unlockPhone();
+  state.navigationStack = [];
+  state.currentView = null;
+  state.currentApp = null;
+  setStatus(true);
+  show(home);
+  appContent.innerHTML = "";
+  appView.scrollTop = 0;
 }
-function wave(){return Array.from({length:24},()=>'<i></i>').join('')}
-function renderWAThread(id){
-  const t=WAThreads[id];if(!t)return;
-  const base=t.offset+t.messages.length*2;
-  const msgs=t.messages.map((m,i)=>{
-    const tm=clock(Math.max(0,base-i*2));
-    if(m[0]==='audio')return `<div class="wa-bubble-line me"><div class="wa-bubble"><div class="wa-audio-card" data-audio-lock="tout"><button class="wa-play">${icon('play')}</button><div><div class="wa-wave">${wave()}</div><div class="wa-audio-meta">0:07</div></div>${avatarHTML(t.avatar,t.name)}</div><small>${tm} <span class="bluechecks">✓✓</span></small></div></div>`;
-    return `<div class="wa-bubble-line ${m[0]==='me'?'me':'them'}"><div class="wa-bubble">${escapeHTML(m[1])}<small>${tm}${m[0]==='me'?' <span class="bluechecks">✓✓</span>':''}</small></div></div>`
-  }).join('');
-  openApp(`<div class="wa-thread">
-    <div class="wa-thread-head">
-      <button class="back" data-app-back>${icon('back')}</button>${avatarHTML(t.avatar,t.name)}
-      <div><b>${t.name}</b><small>en ligne</small></div>
-      <div class="wa-thread-tools"><button class="icon-glass">${icon('video')}</button><button class="icon-glass">${icon('phone')}</button></div>
-    </div>
-    <div class="wa-chat"><div class="wa-day">Aujourd’hui</div><div class="wa-encryption">🔒 Les messages et les appels sont chiffrés de bout en bout.</div>${msgs}</div>
-    <div class="wa-input"><button>${icon('plus')}</button><div class="field">Message</div><button>${icon('camera')}</button><button class="wa-mic">${icon('mic')}</button></div>
-  </div>`);
-}
-
-/* FILES + AUDIO */
-function renderFiles(){openApp(`<div class="files-app">${nav('Récents','•••')}<h1 class="section-title">Fichiers</h1><div class="files-block">
-  <div class="file-row" data-file="abeg"><span class="ficon">🎵</span><div><b>ABEG_MASTER.wav</b><span>Audio · protégé</span></div><span class="chev">›</span></div>
-  <div class="file-row"><span class="ficon">📁</span><div><b>Exports shooting</b><span>8 éléments</span></div><span class="chev">›</span></div>
-  <div class="file-row"><span class="ficon">📄</span><div><b>TRACKLIST_FINAL.pdf</b><span>PDF · 29 oct.</span></div><span class="chev">›</span></div>
-</div></div>`)}
-
-function renderFileLock(kind){
-  const cfg=kind==='abeg'?{title:'ABEG_MASTER.wav',hint:'Code à 4 chiffres',code:'1029'}:{title:'tout_gacher.wav',hint:'Mot de passe · 4 lettres',code:'TIME'};
-  openApp(`<div class="lock-file">${nav(cfg.title)}<div class="file-card"><div style="font-size:42px">🔒</div><h3>Fichier protégé</h3><p>${cfg.hint}</p><div class="code-input"><input id="codeField" maxlength="4" placeholder="••••"><button data-unlock="${kind}" data-code="${cfg.code}">Déverrouiller</button></div></div></div>`);
-}
-function renderAudio(kind){
-  const cfg=kind==='abeg'?{title:'ABEG',file:'ABEG_MASTER.wav',src:AUDIO.abeg,cover:'assets/images/duo-01.jpg'}:{title:'Tout gâcher',file:'tout_gacher.wav',src:AUDIO.tout,cover:'assets/images/gallery-track-2.png'};
-  openApp(`<div class="audio-player">${nav(cfg.title)}<img class="audio-cover" src="${cfg.cover}"><h3>Manii & Paapii</h3><p>${cfg.file}</p><div class="progress"><i id="audioProgress"></i></div><div class="controls"><button data-skip="-10">−10</button><button class="play" id="audioPlay">▶</button><button data-skip="10">+10</button></div><audio id="secretAudio" src="${cfg.src}" preload="metadata"></audio></div>`);
-  setTimeout(bindPlayer,0);
-}
-function bindPlayer(){
-  const a=$('#secretAudio'),p=$('#audioPlay'),bar=$('#audioProgress');if(!a||!p)return;
-  p.onclick=()=>{if(a.paused){a.play();p.textContent='Ⅱ'}else{a.pause();p.textContent='▶'}};
-  $$('[data-skip]').forEach(b=>b.onclick=()=>a.currentTime=Math.max(0,Math.min(a.duration||0,a.currentTime+Number(b.dataset.skip))));
-  a.ontimeupdate=()=>bar.style.width=`${a.duration?(a.currentTime/a.duration)*100:0}%`;a.onended=()=>p.textContent='▶';
-}
-
-/* OTHER APPS */
-function renderPhotos(){
-  const imgs=GALLERY.map((src,i)=>`<img src="${src}" data-photo-index="${i}" onerror="this.style.display='none'">`).join('');
-  openApp(`<div class="photos-app"><div class="photo-toolbar"><h1>Photothèque</h1><div style="color:#777;margin-top:3px">Toutes les photos</div></div><div class="gallery-grid">${imgs}</div><div id="photoViewer" class="photo-viewer"><div class="viewer-top"><button data-close-photo>‹</button><span>Aujourd’hui</span><span>•••</span></div><img id="viewerImg"></div></div>`);
-}
-function renderNotes(){openApp(`<div class="notes-app">${nav('Notes','•••')}<h1 class="notes-title">Notes</h1><div class="note-card"><b>KAIROS</b><p>Le temps ne prévient pas. Il passe. Le bon moment n’est pas forcément celui qu’on avait prévu.</p></div><div class="note-card"><b>À ne pas oublier</b><p>ABEG — garder la master dans Fichiers.<br>Tout gâcher — envoyé sur WhatsApp.<br>02:43.</p></div><div class="note-card"><b>Tracklist</b><p>Kairos · God Bless · Boulot · Bandite · Vincent Kompany · Interlude · Tu sais · LPB</p></div></div>`)}
-function renderCamera(){openApp(`<div class="camera-app"><video src="assets/video/camera.mp4" muted autoplay loop playsinline></video><div class="camera-ui"><div class="cam-glass-row"><span class="cam-glass">${icon('flash')}</span><span class="cam-glass">⌃</span><span class="cam-glass">◉</span></div><div><div class="cam-modes"><span>CINÉMATIQUE</span><span>VIDÉO</span><b>PHOTO</b><span>PORTRAIT</span></div><div class="cam-bottom"><span class="thumb"></span><button class="shutter"></button><span class="flipbtn">${icon('rotate')}</span></div></div></div></div>`,{dark:true})}
-function renderSettings(){openApp(`<div class="settings-app">${nav('Réglages')}<h1>Réglages</h1><div class="setting-card"><div class="setting-row"><span>Mode Avion</span><span>Non</span></div><div class="setting-row"><span>Wi‑Fi</span><span>Connecté</span></div><div class="setting-row"><span>Bluetooth</span><span>Activé</span></div><div class="setting-row"><span>Données cellulaires</span><span>5G</span></div></div><div class="setting-card"><div class="setting-row"><span>Général</span><span>›</span></div><div class="setting-row"><span>Fond d’écran</span><span>›</span></div><div class="setting-row"><span>Face ID et code</span><span>›</span></div></div></div>`)}
-function renderSpotify(){const tracks=['KAIROS','GOD BLESS','BOULOT','BANDITE','VINCENT KOMPANY','INTERLUDE','TU SAIS','LPB'];openApp(`<div class="spotify-app"><div class="spotify-hero"><img src="assets/images/gallery-track-1.png"><h1>KAIROS</h1><p>Manii & Paapii · Album · 2026</p></div><div class="spot-actions"><button class="spot-play">▶</button></div>${tracks.map((t,i)=>`<div class="spot-track"><span>${i+1}</span><div><b>${t}</b><small>Manii & Paapii</small></div><span>•••</span></div>`).join('')}</div>`,{dark:true})}
-function renderCalendar(){openApp(`<div class="calendar-app">${nav('Calendrier')}<h1 class="section-title">Novembre</h1><div class="calendar-event"><div class="datebadge">29</div><h3>KAIROS — sortie album</h3><p>Manii & Paapii · Toutes les plateformes</p><div style="clear:both"></div></div><div class="calendar-event"><div class="datebadge">5</div><h3>Archives KAIROS</h3><p>Vérifier les fichiers récupérés.</p><div style="clear:both"></div></div></div>`)}
-function renderFaceTime(){const people=[['Paapii','appel vidéo',6],['Corentin','appel FaceTime',38],['Yoan','appel vidéo',83]];openApp(`<div class="facetime-app">${nav('FaceTime','＋')}<h1 class="section-title">FaceTime</h1><div class="list">${people.map((p,i)=>`<div class="row">${avatarHTML(i===0?'assets/images/paapii-01.jpg':i===1?'assets/images/gallery-kid.jpg':'assets/images/gallery-studio.jpg',p[0])}<div class="row-copy"><b>${p[0]}</b><span>${p[1]}</span></div><div class="row-meta">${clock(p[2])} ${icon('video')}</div></div>`).join('')}</div></div>`)}
-
-/* PHONE + CALL */
-function renderPhone(){
-  const calls=[['Paapii','mobile',12],['Corentin','mobile',31],['Numéro inconnu','appel manqué',46],['Yoan','mobile',180]];
-  openApp(`<div class="phone-app">${nav('Récents','Modifier')}<h1 class="section-title">Récents</h1><div class="list">${calls.map((r,i)=>`<div class="row">${avatarHTML('',r[0])}<div class="row-copy"><b style="${i===2?'color:#ff3b30':''}">${r[0]}</b><span>${r[1]}</span></div><div class="row-meta">${clock(r[2])} ⓘ</div></div>`).join('')}</div><div class="phone-tabs">
-    <span class="phone-tab">${icon('star')}<small>Favoris</small></span><span class="phone-tab active">${icon('recent')}<small>Récents</small></span><span class="phone-tab">${icon('contacts')}<small>Contacts</small></span><span class="phone-tab">${icon('keypad')}<small>Clavier</small></span><span class="phone-tab">${icon('voicemail')}<small>Messagerie</small></span>
-  </div></div>`)
-}
-function scheduleIncomingCall(){clearTimeout(callTimer);if(callHandled)return;callTimer=setTimeout(()=>{if(!callHandled)triggerIncomingCall()},45000)}
-function triggerIncomingCall(){
-  if(callHandled)return;
-  if(!modal.classList.contains('hidden')&&!modal.classList.contains('call-modal')){callTimer=setTimeout(triggerIncomingCall,10000);return}
-  modal.className='modal call-modal';
-  modal.innerHTML=`<div class="call-screen"><div class="call-head"><small>appel entrant</small><h2>Numéro inconnu</h2><p>peut-être : KAIROS</p></div><div class="call-actions"><button class="call-action decline" data-call-decline><span class="call-circle">${icon('phone')}</span><span>Refuser</span></button><button class="call-action accept" data-call-accept><span class="call-circle">${icon('phone')}</span><span>Accepter</span></button></div></div>`;
+function openApp(html, { dark = false } = {}) {
+  setStatus(dark);
+  appContent.innerHTML = html;
+  show(appView);
+  appView.scrollTop = 0;
+  appContent.scrollTop = 0;
   bindDynamic();
+  enhanceControls();
+  syncAudioUI();
 }
-function acceptCall(){
-  callHandled=true;clearTimeout(callTimer);callStartedAt=Date.now();
-  modal.innerHTML=`<div class="call-screen"><div class="call-head"><small id="callDuration">00:00</small><h2>Numéro inconnu</h2><p>peut-être : KAIROS</p></div><div class="active-call-actions"><span class="call-action"><span class="call-circle">${icon('mic')}</span><span>silence</span></span><span class="call-action"><span class="call-circle">${icon('keypad')}</span><span>clavier</span></span><span class="call-action"><span class="call-circle">◖</span><span>haut-parleur</span></span></div><button class="hangup" data-call-hangup>${icon('phone')}</button><audio id="callAudio" src="${AUDIO.call}" preload="auto"></audio></div>`;
-  const a=$('#callAudio');a.play().catch(()=>{});a.onended=endCall;
-  clearInterval(callInterval);callInterval=setInterval(()=>{const s=Math.floor((Date.now()-callStartedAt)/1000),el=$('#callDuration');if(el)el.textContent=`${pad(Math.floor(s/60))}:${pad(s%60)}`},1000);
+function goBack() {
+  if (state.callStatus !== "idle") return;
+  if ($("#photoViewer.open")) return closePhoto();
+  const previous = state.navigationStack.pop();
+  if (previous) {
+    state.currentView = previous;
+    previous.renderer(...previous.args);
+  } else goHome();
+}
+function toast(msg, ms = 1700) {
+  toastEl.textContent = msg;
+  toastEl.classList.remove("hidden");
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => toastEl.classList.add("hidden"), ms);
+}
+function escapeHTML(s = "") {
+  return String(s).replace(
+    /[&<>'"]/g,
+    (c) =>
+      ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", "'": "&#39;", '"': "&quot;" })[
+        c
+      ],
+  );
+}
+function avatarHTML(src, name = "") {
+  return src
+    ? `<img class="avatar" src="${src}" alt="">`
+    : `<span class="avatar initial">${escapeHTML(name[0] || "?")}</span>`;
+}
+function nav(title, right = "") {
+  return `<div class="ios-nav"><button class="back" data-app-back aria-label="Retour">${icon("back")}</button><h2>${title}</h2>${right ? `<button class="action" data-options aria-label="Options">${right === "•••" ? icon("ellipsis") : right}</button>` : '<span class="nav-spacer"></span>'}</div>`;
+}
+function timeHTML(offset) {
+  return `<time data-clock="${offset}">${clock(offset)}</time>`;
+}
+function iconButton(name, label, attrs = "") {
+  return `<button class="icon-glass" aria-label="${label}" ${attrs}>${icon(name)}</button>`;
+}
+function enhanceControls() {
+  $$("button", appContent).forEach((b) => {
+    if (!b.getAttribute("aria-label") && !b.textContent.trim()) {
+      b.setAttribute(
+        "aria-label",
+        b.dataset.hot ? b.dataset.hot.replaceAll("-", " ") : "Options",
+      );
+    }
+  });
+}
+
+/* MESSAGES — searchable lists and session-only replies. */
+function floatingSearch(scope, compose = false) {
+  return `<div class="floating-search"><label>${icon("search")}<input type="search" data-search="${scope}" aria-label="Rechercher" placeholder="Rechercher"></label>${compose ? iconButton("compose", "Nouveau message", "data-compose") : ""}</div>`;
+}
+function renderMessages() {
+  const rows = Object.entries(IMessageThreads)
+    .map(
+      ([id, t], i) =>
+        `<button class="row message-row" data-msg-thread="${id}" data-searchable="${escapeHTML(t.name + " " + t.preview)}"><span class="unread-dot ${i === 0 && !state.read.has("im-" + id) ? "visible" : ""}"></span>${avatarHTML(t.avatar, t.name)}<span class="row-copy"><b>${t.name}</b><span>${t.preview}</span></span><span class="row-meta">${timeHTML(t.offset)} ${icon("back")}</span></button>`,
+    )
+    .join("");
+  openApp(
+    `<div class="messages-app"><div class="list-toolbar"><button class="text-button" data-message-filter>Filtres</button>${iconButton("ellipsis", "Options des messages", "data-options")}</div><h1 class="section-title">Messages</h1><div class="list">${rows}</div><p class="empty-search hidden">Aucun résultat</p>${floatingSearch("messages", true)}</div>`,
+  );
+}
+function composer(kind, id) {
+  return `<form class="${kind === "im" ? "imessage-compose" : "wa-input"}" data-reply="${kind}" data-thread="${id}">${iconButton("plus", "Joindre un fichier", "data-attach")}<input class="field" name="message" aria-label="${kind === "im" ? "iMessage" : "Message"}" placeholder="${kind === "im" ? "iMessage" : "Message"}" autocomplete="off" maxlength="500">${kind === "wa" ? iconButton("camera", "Appareil photo", "data-open-camera") : ""}<button type="submit" class="send-button" aria-label="Envoyer">${icon("send")}</button></form>`;
+}
+function threadMessages(kind, id, original) {
+  return original.concat(state.messages[kind + "-" + id] || []);
+}
+function renderMessageThread(id) {
+  const t = IMessageThreads[id];
+  if (!t) return;
+  state.read.add("im-" + id);
+  const msgs = threadMessages("im", id, t.messages)
+    .map(
+      (m) =>
+        `<div class="bubble-line ${m[0] === "me" ? "me" : "them"}"><div class="bubble">${escapeHTML(m[1])}</div></div>`,
+    )
+    .join("");
+  openApp(
+    `<div class="thread-wrap"><div class="thread-head"><button class="back" data-app-back aria-label="Retour aux messages">${icon("back")}</button><div class="thread-person">${avatarHTML(t.avatar, t.name)}<b>${t.name}</b></div><div class="thread-tools">${iconButton("video", "Appeler en vidéo", "data-contact-call")}${iconButton("phone", "Appeler", "data-contact-call")}</div></div><div class="bubble-area"><div class="time-label">Aujourd’hui ${timeHTML(t.offset + t.messages.length)}</div>${msgs}<div class="delivery-label">Distribué</div></div>${composer("im", id)}</div>`,
+  );
+}
+
+/* WHATSAPP — the locked WAV is an incoming document, never a voice note. */
+function renderWhatsApp() {
+  const rows = Object.entries(WAThreads)
+    .map(
+      ([id, t]) =>
+        `<button class="row wa-row" data-wa-thread="${id}" data-searchable="${escapeHTML(t.name + " " + t.preview)}" data-unread="${t.unread && !state.read.has("wa-" + id) ? "1" : "0"}" data-group="${id === "kairos" ? 1 : 0}" data-favorite="${id === "paapii" ? 1 : 0}">${avatarHTML(t.avatar, t.name)}<span class="row-copy"><b>${t.name}</b><span>${t.preview}</span></span><span class="row-meta">${timeHTML(t.offset)}${t.unread && !state.read.has("wa-" + id) ? `<span class="green-badge">${t.unread}</span>` : ""}</span></button>`,
+    )
+    .join("");
+  openApp(
+    `<div class="wa-app"><div class="list-toolbar"><button class="text-button" data-options>Modifier</button><div class="wa-top-actions">${iconButton("camera", "Appareil photo", "data-open-camera")}${iconButton("plus", "Nouvelle discussion", "data-wa-compose")}</div></div><h1 class="section-title">Discussions</h1><label class="wa-search">${icon("search")}<input type="search" aria-label="Rechercher une discussion" placeholder="Rechercher" data-search="whatsapp"></label><div class="chip-row">${["Toutes", "Non lues", "Favoris", "Groupes"].map((label, i) => `<button class="chip ${i === 0 ? "active" : ""}" data-wa-filter="${i}" aria-pressed="${i === 0}">${label}</button>`).join("")}</div><div class="list">${rows}</div><p class="empty-search hidden">Aucune discussion</p><div class="wa-footer">${icon("lock")} Vos messages personnels sont chiffrés de bout en bout.</div></div>`,
+  );
+}
+function renderWAThread(id) {
+  const t = WAThreads[id];
+  if (!t) return;
+  state.read.add("wa-" + id);
+  const base = t.offset + t.messages.length * 2;
+  const msgs = threadMessages("wa", id, t.messages)
+    .map((m, i) => {
+      const tm = timeHTML(Math.max(0, base - i * 2));
+      if (m[0] === "file")
+        return `<div class="wa-bubble-line them"><div class="wa-bubble attachment-bubble"><button class="wa-document" data-audio-lock="tout" aria-label="Ouvrir tout_gacher.wav">${icon("file")}<span><b>tout_gacher.wav</b><small>WAV · 31 s · fichier protégé</small></span>${icon("lock")}</button><small>${tm}</small></div></div>`;
+      return `<div class="wa-bubble-line ${m[0] === "me" ? "me" : "them"}"><div class="wa-bubble">${escapeHTML(m[1])}<small>${tm}${m[0] === "me" ? ' <span class="bluechecks">✓✓</span>' : ""}</small></div></div>`;
+    })
+    .join("");
+  openApp(
+    `<div class="wa-thread"><div class="wa-thread-head"><button class="back" data-app-back aria-label="Retour aux discussions">${icon("back")}</button>${avatarHTML(t.avatar, t.name)}<div><b>${t.name}</b><small>en ligne</small></div><div class="wa-thread-tools">${iconButton("video", "Appel vidéo", "data-contact-call")}${iconButton("phone", "Appeler", "data-contact-call")}</div></div><div class="wa-chat"><div class="wa-day">Aujourd’hui</div><div class="wa-encryption">${icon("lock")} Les messages et les appels sont chiffrés de bout en bout.</div>${msgs}</div>${composer("wa", id)}</div>`,
+  );
+}
+
+/* PROTECTED FILES */
+function renderFiles() {
+  openApp(
+    `<div class="files-app">${nav("Récents", "•••")}<h1 class="section-title">Fichiers</h1><div class="files-block"><button class="file-row" data-file="abeg">${icon("file")}<span><b>ABEG_MASTER.wav</b><small>Audio · ${state.abegUnlocked ? "déverrouillé" : "protégé"}</small></span>${icon("lock")}</button><button class="file-row" data-file-photos>${icon("folder")}<span><b>Exports shooting</b><small>Photos</small></span>${icon("back")}</button><button class="file-row" data-file-tracklist>${icon("file")}<span><b>TRACKLIST_FINAL</b><small>Note · 29 oct.</small></span>${icon("back")}</button></div></div>`,
+  );
+}
+function secretUnlocked(kind) {
+  return state[kind === "abeg" ? "abegUnlocked" : "toutGacherUnlocked"];
+}
+function renderFileLock(kind) {
+  if (secretUnlocked(kind)) return renderAudio(kind);
+  const title = kind === "abeg" ? "ABEG_MASTER.wav" : "tout_gacher.wav";
+  openApp(
+    `<div class="lock-file">${nav(title)}<div class="file-card">${icon("lock")}<h3>Fichier protégé</h3><p>${kind === "abeg" ? "Code à 4 chiffres" : "Mot de passe — 4 lettres"}</p><form class="code-input" data-secret="${kind}"><input id="codeField" type="password" inputmode="${kind === "abeg" ? "numeric" : "text"}" aria-label="${kind === "abeg" ? "Code à 4 chiffres" : "Mot de passe à 4 lettres"}" maxlength="4" autocomplete="off" required><button data-unlock="${kind}">Déverrouiller</button></form><p id="passwordFeedback" class="password-feedback" role="status"></p></div></div>`,
+  );
+}
+function trySecret(kind, value) {
+  if (value.trim().toUpperCase() === (kind === "abeg" ? "1029" : "TIME")) {
+    state[kind === "abeg" ? "abegUnlocked" : "toutGacherUnlocked"] = true;
+    session.set("kairos." + kind, "1");
+    // Replace the lock screen in history so back never asks for the password again.
+    state.currentView = { renderer: renderAudio, args: [kind] };
+    renderAudio(kind);
+    return;
+  }
+  const n = ++state.attempts[kind];
+  const hints =
+    kind === "tout"
+      ? [
+          "Mot de passe incorrect",
+          "Quatre lettres. Tu les as déjà vues.",
+          "Ce qui nous échappe, même quand on essaie de le garder.",
+        ]
+      : ["Code incorrect", "La date de sortie.", "Le mois avant le jour."];
+  $("#passwordFeedback").textContent = hints[Math.min(n - 1, 2)];
+  $("#codeField").value = "";
+  $("#codeField").focus();
+}
+function showPassword(kind) {
+  navigate(renderFileLock, kind);
+}
+function closeModal() {
+  phoneScene.querySelectorAll(".view").forEach((v) => (v.inert = false));
+  $("#homeIndicator").inert = false;
+  modal.className = "modal hidden";
+  modal.innerHTML = "";
+  modal.removeAttribute("role");
+  modal.removeAttribute("aria-modal");
+}
+
+/* A single local media player owns all music, including unlocked files.
+   Album tracks without a real file are deliberately unavailable. */
+const ALBUM_TRACKS = [
+  "KAIROS",
+  "GOD BLESS",
+  "BOULOT",
+  "BANDITE",
+  "VINCENT KOMPANY",
+  "INTERLUDE",
+  "TU SAIS",
+  "LPB",
+].map((title, i) => ({
+  id: "album-" + i,
+  title,
+  artist: "Manii & Paapii",
+  artwork: "assets/images/gallery-track-1.png",
+  src: null,
+}));
+const SECRET_TRACKS = [
+  {
+    id: "abeg",
+    title: "ABEG",
+    artist: "Manii & Paapii",
+    artwork: "assets/images/duo-01.jpg",
+    src: AUDIO.abeg,
+  },
+  {
+    id: "tout",
+    title: "Tout gâcher",
+    artist: "Manii & Paapii",
+    artwork: "assets/images/gallery-track-2.png",
+    src: AUDIO.tout,
+  },
+];
+class AudioManager {
+  constructor() {
+    this.audio = new Audio();
+    this.audio.preload = "metadata";
+    this.state = {
+      currentTrack: null,
+      currentTime: 0,
+      duration: 0,
+      isPlaying: false,
+      queue: [],
+      shuffle: false,
+    };
+    state.musicState = this.state;
+    for (const event of [
+      "timeupdate",
+      "loadedmetadata",
+      "durationchange",
+      "play",
+      "pause",
+      "ended",
+    ])
+      this.audio.addEventListener(event, () => {
+        this.state.currentTime = this.audio.currentTime;
+        this.state.duration = Number.isFinite(this.audio.duration)
+          ? this.audio.duration
+          : 0;
+        this.state.isPlaying = !this.audio.paused;
+        syncAudioUI();
+        if (event === "ended") this.next(1, false);
+      });
+    this.audio.addEventListener("error", () => {
+      this.state.isPlaying = false;
+      syncAudioUI();
+      toast("Ce fichier ne peut pas être lu");
+    });
+  }
+  available() {
+    return SECRET_TRACKS.filter((t) => secretUnlocked(t.id));
+  }
+  load(track, queue = this.available()) {
+    if (!track?.src) {
+      toast("Ce titre n’est pas encore sur le téléphone");
+      return false;
+    }
+    if (state.callStatus !== "idle") {
+      toast("Appel en cours");
+      return false;
+    }
+    this.state.queue = queue.filter((t) => t.src);
+    if (this.state.currentTrack?.id !== track.id) {
+      this.audio.src = track.src;
+      this.state.currentTrack = track;
+      this.state.currentTime = 0;
+      this.state.duration = 0;
+    }
+    syncAudioUI();
+    return true;
+  }
+  async play(track) {
+    if (state.callStatus !== "idle") return;
+    if (track && !this.load(track)) return;
+    if (!this.state.currentTrack) {
+      const first = this.available()[0];
+      if (!first) {
+        toast("Les fichiers audio sont encore verrouillés");
+        return;
+      }
+      this.load(first);
+    }
+    try {
+      await this.audio.play();
+    } catch {
+      this.state.isPlaying = false;
+      syncAudioUI();
+      toast("Touchez Lecture pour démarrer le son");
+    }
+  }
+  toggle() {
+    if (this.audio.paused) this.play();
+    else this.audio.pause();
+  }
+  next(direction = 1, manual = true) {
+    const q = this.state.queue;
+    if (!q.length) return;
+    if (direction < 0 && this.audio.currentTime > 3) {
+      this.audio.currentTime = 0;
+      return;
+    }
+    const i = q.findIndex((t) => t.id === this.state.currentTrack?.id);
+    let next = i + direction;
+    if (this.state.shuffle && q.length > 1)
+      next = (i + 1 + Math.floor(Math.random() * (q.length - 1))) % q.length;
+    if (!manual && next >= q.length) return;
+    this.play(q[(next + q.length) % q.length]);
+  }
+  seek(value) {
+    if (this.state.duration)
+      this.audio.currentTime = Math.max(
+        0,
+        Math.min(this.state.duration, value),
+      );
+  }
+}
+const audioManager = new AudioManager();
+function mediaTime(s) {
+  return `${Math.floor((s || 0) / 60)}:${pad(Math.floor((s || 0) % 60))}`;
+}
+function syncAudioUI() {
+  if (typeof audioManager === "undefined") return;
+  const m = audioManager.state,
+    t = m.currentTrack;
+  $$("[data-player-toggle]").forEach((b) => {
+    b.innerHTML = icon(m.isPlaying ? "pause" : "play");
+    b.setAttribute("aria-label", m.isPlaying ? "Pause" : "Lecture");
+    b.setAttribute("aria-pressed", String(m.isPlaying));
+  });
+  $$("[data-now-title]").forEach(
+    (el) => (el.textContent = t?.title || "Aucune lecture"),
+  );
+  $$("[data-now-art]").forEach((el) => {
+    el.src = t?.artwork || "assets/images/gallery-track-1.png";
+  });
+  $$("[data-player-time]").forEach(
+    (el) => (el.textContent = mediaTime(m.currentTime)),
+  );
+  $$("[data-player-duration]").forEach(
+    (el) => (el.textContent = mediaTime(m.duration)),
+  );
+  $$("[data-player-seek]").forEach((el) => {
+    if (document.activeElement !== el)
+      el.value = m.duration ? (m.currentTime / m.duration) * 100 : 0;
+  });
+  $$("[data-track]").forEach((el) =>
+    el.classList.toggle("playing", el.dataset.track === t?.id),
+  );
+  const island = $(".dynamic-island");
+  island.classList.toggle("is-playing", m.isPlaying);
+  island.setAttribute(
+    "aria-label",
+    m.isPlaying ? "En lecture : " + t?.title : "Dynamic Island",
+  );
+}
+function miniPlayer() {
+  return `<div class="mini-player liquid"><button class="mini-info" data-now-open><img data-now-art src="assets/images/gallery-track-1.png" alt="Pochette"><span><b data-now-title>Aucune lecture</b><small>Manii & Paapii</small></span></button>${iconButton("play", "Lecture", "data-player-toggle")}${iconButton("next", "Morceau suivant", "data-player-next")}</div>`;
+}
+function playerControls() {
+  return `<div class="player-seek"><input type="range" min="0" max="100" step="0.1" value="0" aria-label="Progression audio" data-player-seek><div><span data-player-time>0:00</span><span data-player-duration>0:00</span></div></div><div class="controls">${iconButton("previous", "Morceau précédent", "data-player-prev")}<button class="play" data-player-toggle aria-label="Lecture">${icon("play")}</button>${iconButton("next", "Morceau suivant", "data-player-next")}</div>`;
+}
+function renderAudio(kind) {
+  if (!secretUnlocked(kind)) return renderFileLock(kind);
+  const track = SECRET_TRACKS.find((t) => t.id === kind);
+  audioManager.load(track);
+  openApp(
+    `<div class="audio-player">${nav(track.title, "•••")}<img class="audio-cover" src="${track.artwork}" alt="${track.title}"><p class="eyebrow">ARCHIVES KAIROS</p><h2>${track.title}</h2><p>Manii & Paapii</p>${playerControls()}<div class="audio-footer">${icon("speaker")} Ce téléphone ${iconButton("share", "Partager", "data-share")}</div></div>`,
+  );
+}
+function musicTrackRows(tracks) {
+  return tracks
+    .map(
+      (t, i) =>
+        `<button class="music-track ${t.src ? "" : "unavailable"}" data-track="${t.id}" aria-disabled="${!t.src}"><span>${t.src ? icon("play") : i + 1}</span><span><b>${t.title}</b><small>${t.src ? "Manii & Paapii" : "Audio à venir"}</small></span>${icon("ellipsis")}</button>`,
+    )
+    .join("");
+}
+function renderMusic(view = "library") {
+  const available = audioManager.available();
+  const library = `<div class="list-toolbar"><span>Bibliothèque</span>${iconButton("ellipsis", "Options", "data-options")}</div><h1 class="section-title">Bibliothèque</h1><div class="library-categories"><button data-music-album>${icon("contacts")} Artistes ${icon("back")}</button><button data-music-album>${icon("file")} Albums ${icon("back")}</button><button data-music-album>${icon("music")} Morceaux ${icon("back")}</button></div><h2 class="subheading">Ajouts récents</h2><button class="album-tile" data-music-album><img src="assets/images/gallery-track-1.png" alt="Pochette KAIROS"><b>KAIROS</b><span>Manii & Paapii</span></button>${available.length ? `<h2 class="subheading">Sur cet iPhone</h2>${musicTrackRows(available)}` : '<p class="muted library-hint">Quelques fichiers sont restés dans les archives.</p>'}`;
+  const album = `${nav("Bibliothèque", "•••")}<div class="album-header"><img src="assets/images/gallery-track-1.png" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii</p><small>ALBUM · 8 MORCEAUX</small></div><div class="album-actions"><button data-album-play>${icon("play")} Lecture</button><button data-shuffle>${icon("shuffle")} Aléatoire</button></div><div>${musicTrackRows(ALBUM_TRACKS)}</div><p class="muted album-notice">Les morceaux de l’album ne sont pas encore stockés sur cet iPhone.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}`;
+  openApp(
+    `<div class="music-app">${view === "album" ? album : library}${miniPlayer()}<div class="music-tabs"><button class="active" data-music-library>${icon("file")}<span>Bibliothèque</span></button><button data-music-album>${icon("music")}<span>KAIROS</span></button><button data-music-search>${icon("search")}<span>Rechercher</span></button></div></div>`,
+  );
+}
+
+/* PHOTOS — originals stay intact; thumbnails are generated from the same assets. */
+function renderPhotos() {
+  const imgs = GALLERY.map(
+    (src, i) =>
+      `<button data-photo-index="${i}" aria-label="Ouvrir la photo ${i + 1}"><img src="assets/thumbnails/${src
+        .split("/")
+        .pop()
+        .replace(
+          /\.[^.]+$/,
+          ".webp",
+        )}" loading="lazy" decoding="async" alt="Photo des archives KAIROS"></button>`,
+  ).join("");
+  openApp(
+    `<div class="photos-app"><div class="photo-toolbar"><div><h1>Photothèque</h1><p>${new Date().toLocaleDateString("fr-FR", { month: "long", year: "numeric" })}</p></div>${iconButton("ellipsis", "Options des photos", "data-options")}</div><div class="gallery-grid">${imgs}</div><p class="photo-count">${GALLERY.length} photos</p><div id="photoViewer" class="photo-viewer"><div class="viewer-top">${iconButton("back", "Fermer la photo", "data-close-photo")}<span id="photoPosition"></span>${iconButton("ellipsis", "Options de la photo", "data-photo-options")}</div><img id="viewerImg" alt="Photo des archives KAIROS"><div class="viewer-bottom">${iconButton("back", "Photo précédente", "data-photo-prev")}${iconButton("share", "Partager la photo", "data-share")}${iconButton("next", "Photo suivante", "data-photo-next")}</div></div></div>`,
+  );
+}
+function openPhoto(index) {
+  state.photoIndex = Number(index);
+  $("#photoViewer").classList.add("open");
+  setStatus(true);
+  updatePhoto();
+}
+function updatePhoto() {
+  $("#viewerImg").src = GALLERY[state.photoIndex];
+  $("#photoPosition").textContent =
+    `${state.photoIndex + 1} sur ${GALLERY.length}`;
+}
+function movePhoto(delta) {
+  state.photoIndex =
+    (state.photoIndex + delta + GALLERY.length) % GALLERY.length;
+  updatePhoto();
+}
+function closePhoto() {
+  $("#photoViewer").classList.remove("open");
+  setStatus(false);
+}
+
+/* NOTES — deliberately personal fragments, not a lore guide. */
+const NOTES = [
+  {
+    id: "garde",
+    title: "Ce qu’on garde",
+    section: "Épinglées",
+    offset: 20,
+    body: "La prise où on rigole à la fin.\nMême si ça dépasse un peu.\n\nNe pas tout nettoyer.\n\nP. dit que la première version respirait mieux. Il a peut-être raison.",
+  },
+  {
+    id: "clips",
+    title: "Idées clips",
+    section: "Aujourd’hui",
+    offset: 55,
+    body: "Parking vide / dernière lumière\nPlan fixe, laisser venir.\n\nDemander à Yoan pour le toit.\nPas de fumée cette fois svp\n\nfin : on part chacun d’un côté ? à voir",
+  },
+  {
+    id: "oubli",
+    title: "À ne pas oublier",
+    section: "Aujourd’hui",
+    offset: 130,
+    body: "☑ envoyer les selects\n☐ rappeler Corentin\n☐ récupérer le disque\n\n29/10. comme prévu.\n\nLe bounce est dans Fichiers, pas dans les exports.",
+  },
+  {
+    id: "tracklist",
+    title: "Tracklist",
+    section: "7 jours précédents",
+    offset: 2800,
+    body: "KAIROS\nGOD BLESS\nBOULOT\nBANDITE\nVINCENT KOMPANY\nINTERLUDE\nTU SAIS\nLPB\n\nordre final ? ne plus toucher avant écoute ensemble",
+  },
+  {
+    id: "0243",
+    title: "02:43",
+    section: "7 jours précédents",
+    offset: 4300,
+    body: "Encore réveillé.\n\nJ’ai laissé le téléphone sur la table.\nIl a sonné une fois.\n\nPersonne au bout.",
+  },
+  {
+    id: "exports",
+    title: "Exports",
+    section: "30 jours précédents",
+    offset: 18000,
+    body: "master / instrumental / a cappella\n48k, pas le vieux dossier\n\nYoan a les images.\nRenommer FINAL_final2 avant d’envoyer…",
+  },
+  {
+    id: "tout",
+    title: "Tout gâcher",
+    section: "30 jours précédents",
+    offset: 21000,
+    body: "On avait dit qu’on le gardait pour nous.\n\nNe pas effacer le message de P.\n\nIl y a des trucs qu’on réécoute seulement la nuit.",
+  },
+];
+function noteDate(n, full = false) {
+  return new Date(Date.now() - n.offset * 60000).toLocaleString(
+    "fr-FR",
+    full
+      ? { dateStyle: "long", timeStyle: "short" }
+      : n.offset < 1440
+        ? { hour: "2-digit", minute: "2-digit" }
+        : { day: "numeric", month: "short" },
+  );
+}
+function renderNotes() {
+  openApp(
+    `<div class="notes-app"><div class="list-toolbar"><span class="notes-account">${icon("folder")} Sur mon iPhone</span>${iconButton("ellipsis", "Options des notes", "data-options")}</div><h1 class="notes-title">Notes</h1>${[
+      "Épinglées",
+      "Aujourd’hui",
+      "7 jours précédents",
+      "30 jours précédents",
+    ]
+      .map(
+        (section) =>
+          `<section class="note-section"><h2>${section === "Épinglées" ? icon("pin") : ""}${section}</h2><div class="note-group">${NOTES.filter(
+            (n) => n.section === section,
+          )
+            .map(
+              (n) =>
+                `<button class="note-row" data-note="${n.id}" data-searchable="${escapeHTML(n.title + " " + n.body)}"><b>${n.title}</b><span><time>${noteDate(n)}</time> ${escapeHTML(n.body.split("\n")[0])}</span></button>`,
+            )
+            .join("")}</div></section>`,
+      )
+      .join(
+        "",
+      )}<p class="empty-search hidden">Aucune note</p>${floatingSearch("notes")}</div>`,
+  );
+}
+function renderNote(id) {
+  const n = NOTES.find((n) => n.id === id);
+  if (!n) return;
+  openApp(
+    `<article class="note-detail">${nav("Notes", "•••")}<time class="note-date">${noteDate(n, true)}</time><h1>${n.title}</h1><div class="note-body">${escapeHTML(n.body).replaceAll("\n", "<br>")}</div><footer>${iconButton("share", "Partager la note", "data-share")}${iconButton("search", "Rechercher dans les notes", "data-notes-search")}</footer></article>`,
+  );
+}
+
+function renderCamera() {
+  openApp(
+    `<div class="camera-app"><video src="assets/video/camera.mp4" muted autoplay loop playsinline preload="metadata" poster="assets/images/manii-02.jpg"></video><div class="camera-ui"><div class="cam-glass-row">${iconButton("flash", "Flash désactivé", "data-camera-flash")}${iconButton("back", "Réglages caméra", "data-camera-options")}${iconButton("rotate", "Live Photo", "data-camera-live")}</div><div class="camera-bottom"><div class="camera-zoom"><button data-zoom="0.5">.5</button><button class="active" data-zoom="1">1×</button><button data-zoom="2">2</button></div><div class="cam-modes">${["CINÉMATIQUE", "VIDÉO", "PHOTO", "PORTRAIT"].map((m) => `<button class="${m === "PHOTO" ? "active" : ""}" data-camera-mode>${m}</button>`).join("")}</div><div class="cam-bottom"><button class="thumb" data-camera-gallery aria-label="Dernière photo"></button><button class="shutter" data-shutter aria-label="Prendre une photo"></button><button class="flipbtn" data-camera-flip aria-label="Changer de caméra">${icon("rotate")}</button></div></div></div><div class="camera-flash"></div></div>`,
+    { dark: true },
+  );
+}
+function renderSettings() {
+  openApp(
+    `<div class="settings-app"><h1>Réglages</h1><div class="setting-card setting-profile">${avatarHTML("assets/images/duo-01.jpg", "KAIROS")}<div><b>KAIROS</b><small>Ce téléphone</small></div></div><div class="setting-card"><button class="setting-row" data-setting-toggle><span>Mode Avion</span><span class="switch" role="switch" aria-checked="false"></span></button><button class="setting-row" data-setting-detail="Wi-Fi"><span>Wi-Fi</span><span>KAIROS — studio ${icon("back")}</span></button><button class="setting-row" data-setting-toggle><span>Bluetooth</span><span class="switch on" role="switch" aria-checked="true"></span></button></div><div class="setting-card">${["Général", "Fond d’écran", "Face ID et code"].map((label) => `<button class="setting-row" data-setting-detail="${label}"><span>${label}</span>${icon("back")}</button>`).join("")}</div></div>`,
+  );
+}
+function renderSettingDetail(label) {
+  openApp(
+    `<div class="settings-app">${nav(label)}<div class="setting-card">${label === "Général" ? '<div class="setting-row"><span>Nom</span><span>iPhone de KAIROS</span></div><div class="setting-row"><span>Modèle</span><span>iPhone 16 Pro</span></div><div class="setting-row"><span>Version d’iOS</span><span>26.0</span></div>' : label === "Fond d’écran" ? '<img class="wallpaper-preview" src="assets/images/home-wallpaper.jpg" alt="Fond d’écran actuel">' : `<p class="settings-description">${label === "Wi-Fi" ? "Connecté à KAIROS — studio." : "Le téléphone est déverrouillé."}</p>`}</div></div>`,
+  );
+}
+function renderSpotify() {
+  const available = audioManager.available();
+  openApp(
+    `<div class="spotify-app">${nav("KAIROS", "•••")}<div class="spotify-hero"><img src="assets/images/gallery-track-1.png" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii · Album</p></div><div class="spot-actions">${iconButton("shuffle", "Lecture aléatoire", "data-shuffle")}<button class="spot-play" data-album-play aria-label="Lire l’album">${icon("play")}</button></div>${musicTrackRows(ALBUM_TRACKS)}<p class="album-notice muted">Les titres de l’album ne sont pas encore disponibles sur ce téléphone.</p>${available.length ? `<h2 class="subheading">Fichiers locaux</h2>${musicTrackRows(available)}` : ""}${miniPlayer()}</div>`,
+    { dark: true },
+  );
+}
+function renderCalendar(monthOffset = 0) {
+  const now = new Date(),
+    d = new Date(now.getFullYear(), now.getMonth() + monthOffset, 1),
+    days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(),
+    start = (d.getDay() + 6) % 7;
+  openApp(
+    `<div class="calendar-app"><div class="list-toolbar">${iconButton("back", "Mois précédent", `data-month="${monthOffset - 1}"`)}<button class="text-button" data-month="0">Aujourd’hui</button>${iconButton("next", "Mois suivant", `data-month="${monthOffset + 1}"`)}</div><h1 class="section-title">${d.toLocaleDateString("fr-FR", { month: "long" })}</h1><p class="calendar-year">${d.getFullYear()}</p><div class="calendar-grid">${["L", "M", "M", "J", "V", "S", "D"].map((x) => `<small>${x}</small>`).join("")}${Array.from({ length: start }, () => "<span></span>").join("")}${Array.from({ length: days }, (_, i) => `<button class="${!monthOffset && i + 1 === now.getDate() ? "today" : ""}" data-calendar-day="${i + 1}" data-calendar-month="${d.getMonth()}">${i + 1}</button>`).join("")}</div><div id="calendarAgenda"><div class="calendar-event"><div class="datebadge">29</div><h3>KAIROS — sortie album</h3><p>29 octobre · Manii & Paapii</p></div></div></div>`,
+  );
+}
+function renderFaceTime() {
+  const people = [
+    ["Paapii", "assets/images/paapii-01.jpg", 6],
+    ["Corentin", "assets/images/gallery-kid.jpg", 38],
+    ["Yoan", "assets/images/gallery-studio.jpg", 83],
+  ];
+  openApp(
+    `<div class="facetime-app">${nav("FaceTime", "＋")}<h1 class="section-title">FaceTime</h1><button class="facetime-new" data-contact-call>${icon("video")} Nouveau FaceTime</button><div class="list">${people.map((p) => `<button class="row" data-contact-call>${avatarHTML(p[1], p[0])}<span class="row-copy"><b>${p[0]}</b><span>Appel vidéo</span></span><span class="row-meta">${timeHTML(p[2])} ${icon("video")}</span></button>`).join("")}</div></div>`,
+  );
+}
+
+/* PHONE + CALL: one incoming timer from first unlock, with independent Phone tabs. */
+function renderPhone(tab = "Récents") {
+  const contacts = ["Paapii", "Corentin", "Numéro inconnu", "Yoan"];
+  const rows = contacts
+    .map(
+      (name, i) =>
+        `<button class="row" data-call-info="${name}">${avatarHTML("", name)}<span class="row-copy"><b class="${i === 2 ? "missed" : ""}">${name}</b><span>${i === 2 ? "Appel manqué" : "mobile"}</span></span><span class="row-meta">${timeHTML([12, 31, 46, 180][i])} ${icon("info")}</span></button>`,
+    )
+    .join("");
+  const dial = `<div class="dialpad"><output id="dialNumber" aria-live="polite"></output><div class="dial-grid">${"123456789*0#"
+    .split("")
+    .map(
+      (n, i) =>
+        `<button data-dial="${n}">${n}<small>${["", "ABC", "DEF", "GHI", "JKL", "MNO", "PQRS", "TUV", "WXYZ", "", "+", ""][i]}</small></button>`,
+    )
+    .join(
+      "",
+    )}</div><div class="dial-actions"><button class="dial-call" data-dial-call aria-label="Appeler">${icon("phone")}</button>${iconButton("back", "Effacer", "data-dial-delete")}</div></div>`;
+  const content =
+    tab === "Clavier"
+      ? dial
+      : tab === "Messagerie"
+        ? '<div class="voicemail-empty">Aucun message vocal</div>'
+        : `<div class="list">${tab === "Favoris" ? rows.split("</button>")[0] + "</button>" : rows}</div>`;
+  openApp(
+    `<div class="phone-app"><div class="list-toolbar"><span></span><button class="text-button" data-options>Modifier</button></div><h1 class="section-title">${tab}</h1>${content}<div class="phone-tabs">${[
+      ["Favoris", "star"],
+      ["Récents", "recent"],
+      ["Contacts", "contacts"],
+      ["Clavier", "keypad"],
+      ["Messagerie", "voicemail"],
+    ]
+      .map(
+        ([title, ic]) =>
+          `<button class="phone-tab ${tab === title ? "active" : ""}" data-phone-tab="${title}" aria-label="${title}" aria-pressed="${tab === title}">${icon(ic)}<small>${title}</small></button>`,
+      )
+      .join("")}</div></div>`,
+  );
+}
+function scheduleIncomingCall() {
+  if (callTimer || state.callHandled || state.callStatus !== "idle") return;
+  callTimer = setTimeout(triggerIncomingCall, 35000);
+}
+function setModalInert() {
+  phoneScene.querySelectorAll(".view").forEach((v) => (v.inert = true));
+  $("#homeIndicator").inert = true;
+}
+function triggerIncomingCall() {
+  if (state.callHandled || state.callStatus !== "idle") return;
+  if (!modal.classList.contains("hidden")) {
+    callTimer = setTimeout(triggerIncomingCall, 5000);
+    return;
+  }
+  audioManager.audio.pause();
+  state.callStatus = "ringing";
+  clearTimeout(callTimer);
+  callTimer = null;
+  setModalInert();
+  modal.className = "modal call-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-label", "Appel entrant de Numéro inconnu");
+  modal.innerHTML = `<div class="call-screen"><div class="call-head"><span class="caller-avatar">${icon("contacts")}</span><small>iPhone · appel entrant</small><h2>Numéro inconnu</h2><p>peut-être : KAIROS</p></div><div class="call-actions"><button class="call-action decline" data-call-decline><span class="call-circle">${icon("phone")}</span><span>Refuser</span></button><button class="call-action accept" data-call-accept><span class="call-circle">${icon("phone")}</span><span>Accepter</span></button></div></div>`;
   bindDynamic();
+  $("[data-call-accept]").focus();
 }
-function endCall(){clearInterval(callInterval);const a=$('#callAudio');if(a){a.pause();a.currentTime=0}modal.className='modal hidden';modal.innerHTML='';toast('Appel terminé')}
-function declineCall(){callHandled=true;clearTimeout(callTimer);modal.className='modal hidden';modal.innerHTML='';toast('Appel refusé')}
+function markCallHandled() {
+  state.callHandled = true;
+  session.set("kairos.callHandled", "1");
+  clearTimeout(callTimer);
+  callTimer = null;
+}
+function acceptCall() {
+  markCallHandled();
+  state.callStatus = "active";
+  callStartedAt = Date.now();
+  modal.innerHTML = `<div class="call-screen"><div class="call-head"><small id="callDuration">00:00</small><h2>Numéro inconnu</h2><p>peut-être : KAIROS</p></div><div class="active-call-actions">${[
+    ["mic", "silence"],
+    ["keypad", "clavier"],
+    ["speaker", "haut-parleur"],
+  ]
+    .map(
+      ([ic, label]) =>
+        `<button class="call-action" data-call-control="${ic}" aria-pressed="false"><span class="call-circle">${icon(ic)}</span><span>${label}</span></button>`,
+    )
+    .join("")}</div><div id="callKeypad" class="hidden">${"123456789*0#"
+    .split("")
+    .map((n) => `<button data-call-digit>${n}</button>`)
+    .join(
+      "",
+    )}</div><button class="hangup" data-call-hangup aria-label="Raccrocher">${icon("phone")}</button><audio id="callAudio" src="${AUDIO.call}" preload="metadata"></audio></div>`;
+  const a = $("#callAudio");
+  a.play().catch(() => toast("Touchez le haut-parleur pour lancer le son"));
+  a.onended = endCall;
+  a.onerror = () => {
+    toast("Audio de l’appel indisponible");
+    endCall();
+  };
+  clearInterval(callInterval);
+  callInterval = setInterval(() => {
+    const el = $("#callDuration");
+    if (el) el.textContent = mediaTime(a.currentTime);
+  }, 250);
+  bindDynamic();
+  $("[data-call-hangup]").focus();
+}
+function endCall() {
+  markCallHandled();
+  clearInterval(callInterval);
+  const a = $("#callAudio");
+  if (a) {
+    a.pause();
+    a.currentTime = 0;
+  }
+  state.callStatus = "idle";
+  closeModal();
+  toast("Appel terminé");
+}
+function declineCall() {
+  markCallHandled();
+  state.callStatus = "idle";
+  closeModal();
+  toast("Appel refusé");
+}
 
 /* screenshot apps */
-function screenshotApp(src,hotspots=[],dark=false){const spots=hotspots.map(h=>`<button class="hotspot" data-hot="${h.action}" style="left:${h.left}%;top:${h.top}%;width:${h.width}%;height:${h.height}%"></button>`).join('');openApp(`<div class="screen-shot-app"><img class="full-shot" src="${src}">${spots}</div>`,{dark})}
-function renderInstagram(state='manii-profile'){
-  const map={
-    'manii-profile':['assets/images/insta-manii-profile.webp',[{action:'insta-manii-following',left:67,top:16,width:29,height:17}]],
-    'manii-following':['assets/images/insta-manii-following.webp',[{action:'insta-manii-profile',left:0,top:0,width:18,height:10},{action:'insta-paapii-profile',left:0,top:34,width:100,height:14}]],
-    'paapii-profile':['assets/images/insta-paapii-profile.webp',[{action:'insta-manii-following',left:0,top:0,width:18,height:10},{action:'insta-paapii-following',left:67,top:13,width:28,height:16}]],
-    'paapii-following':['assets/images/insta-paapii-following.webp',[{action:'insta-paapii-profile',left:0,top:0,width:18,height:10},{action:'insta-manii-profile',left:0,top:13,width:100,height:13}]]
-  };const [src,hs]=map[state];screenshotApp(src,hs,false)
+function screenshotApp(src, hotspots = [], dark = false) {
+  const spots = hotspots
+    .map(
+      (h) =>
+        `<button class="hotspot" aria-label="${h.action.includes("following") ? "Comptes suivis" : "Ouvrir le profil"}" data-hot="${h.action}" style="left:${h.left}%;top:${h.top}%;width:${h.width}%;height:${h.height}%"></button>`,
+    )
+    .join("");
+  openApp(
+    `<div class="screen-shot-app"><img class="full-shot" src="${src}">${spots}</div>`,
+    { dark },
+  );
 }
-function renderMusic(state='library'){if(state==='album')screenshotApp('assets/images/apple-kairos.webp',[{action:'music-library',left:0,top:0,width:20,height:12}],true);else screenshotApp('assets/images/apple-library.webp',[{action:'music-album',left:0,top:36,width:52,height:24}],false)}
-
-/* PASSWORD MODAL */
-function showPassword(kind){
-  const expected=kind==='abeg'?'1029':'TIME';
-  modal.className='modal';
-  modal.innerHTML=`<div class="modal-card"><h3>${kind==='abeg'?'ABEG_MASTER.wav':'tout_gacher.wav'}</h3><p>${kind==='abeg'?'Code à 4 chiffres':'Mot de passe à 4 lettres'}</p><input id="modalCode" maxlength="4" autofocus><div class="modal-actions"><button class="cancel" data-modal-close>Annuler</button><button class="ok" data-modal-ok="${kind}" data-code="${expected}">Ouvrir</button></div></div>`;
-  setTimeout(()=>$('#modalCode')?.focus(),50);bindDynamic()
+function renderInstagram(state = "manii-profile") {
+  const map = {
+    "manii-profile": [
+      "assets/images/insta-manii-profile.webp",
+      [
+        {
+          action: "insta-manii-following",
+          left: 67,
+          top: 16,
+          width: 29,
+          height: 17,
+        },
+      ],
+    ],
+    "manii-following": [
+      "assets/images/insta-manii-following.webp",
+      [
+        {
+          action: "insta-manii-profile",
+          left: 0,
+          top: 0,
+          width: 18,
+          height: 10,
+        },
+        {
+          action: "insta-paapii-profile",
+          left: 0,
+          top: 34,
+          width: 100,
+          height: 14,
+        },
+      ],
+    ],
+    "paapii-profile": [
+      "assets/images/insta-paapii-profile.webp",
+      [
+        {
+          action: "insta-manii-following",
+          left: 0,
+          top: 0,
+          width: 18,
+          height: 10,
+        },
+        {
+          action: "insta-paapii-following",
+          left: 67,
+          top: 13,
+          width: 28,
+          height: 16,
+        },
+      ],
+    ],
+    "paapii-following": [
+      "assets/images/insta-paapii-following.webp",
+      [
+        {
+          action: "insta-paapii-profile",
+          left: 0,
+          top: 0,
+          width: 18,
+          height: 10,
+        },
+        {
+          action: "insta-manii-profile",
+          left: 0,
+          top: 13,
+          width: 100,
+          height: 13,
+        },
+      ],
+    ],
+  };
+  const [src, hs] = map[state];
+  screenshotApp(src, hs, false);
 }
-function closeModal(){modal.className='modal hidden';modal.innerHTML=''}
-
-function bindDynamic(){
-  $$('[data-app-back]').forEach(b=>b.onclick=goBack);
-  $$('[data-msg-thread]').forEach(b=>b.onclick=()=>renderMessageThread(b.dataset.msgThread));
-  $$('[data-wa-thread]').forEach(b=>b.onclick=()=>renderWAThread(b.dataset.waThread));
-  $$('[data-file="abeg"]').forEach(b=>b.onclick=()=>renderFileLock('abeg'));
-  $$('[data-unlock]').forEach(b=>b.onclick=()=>{const v=$('#codeField')?.value.trim().toUpperCase();if(v===b.dataset.code)renderAudio(b.dataset.unlock);else toast('Code incorrect')});
-  $$('[data-audio-lock]').forEach(b=>b.onclick=()=>showPassword(b.dataset.audioLock));
-  $$('[data-modal-close]').forEach(b=>b.onclick=closeModal);
-  $$('[data-modal-ok]').forEach(b=>b.onclick=()=>{const v=$('#modalCode')?.value.trim().toUpperCase();if(v===b.dataset.code){const k=b.dataset.modalOk;closeModal();renderAudio(k)}else toast('Mot de passe incorrect')});
-  $$('[data-photo-index]').forEach(img=>img.onclick=()=>{const v=$('#photoViewer'),vi=$('#viewerImg');vi.src=GALLERY[Number(img.dataset.photoIndex)];v.classList.add('open')});
-  $$('[data-close-photo]').forEach(b=>b.onclick=()=>$('#photoViewer')?.classList.remove('open'));
-  $$('[data-hot]').forEach(b=>b.onclick=()=>{const a=b.dataset.hot;
-    if(a==='insta-manii-following')renderInstagram('manii-following'); if(a==='insta-paapii-profile')renderInstagram('paapii-profile');
-    if(a==='insta-paapii-following')renderInstagram('paapii-following'); if(a==='insta-manii-profile')renderInstagram('manii-profile');
-    if(a==='music-album')renderMusic('album'); if(a==='music-library')renderMusic('library');
+/* Bind only the freshly rendered view; persistent AudioManager listeners are installed once. */
+function bindDynamic() {
+  const on = (selector, handler) =>
+    $$(selector).forEach((el) => (el.onclick = (e) => handler(el, e)));
+  on("[data-app-back]", goBack);
+  on("[data-msg-thread]", (b) =>
+    navigate(renderMessageThread, b.dataset.msgThread),
+  );
+  on("[data-wa-thread]", (b) => navigate(renderWAThread, b.dataset.waThread));
+  on("[data-file]", (b) => navigate(renderFileLock, b.dataset.file));
+  on("[data-audio-lock]", (b) => showPassword(b.dataset.audioLock));
+  $$("[data-secret]").forEach(
+    (form) =>
+      (form.onsubmit = (e) => {
+        e.preventDefault();
+        trySecret(form.dataset.secret, $("#codeField").value);
+      }),
+  );
+  on("[data-file-photos]", () => navigate(renderPhotos));
+  on("[data-file-tracklist]", () => navigate(renderNote, "tracklist"));
+  on("[data-note]", (b) => navigate(renderNote, b.dataset.note));
+  on("[data-notes-search]", () => {
+    navigate(renderNotes);
+    $("[data-search]").focus();
   });
-  $$('[data-call-decline]').forEach(b=>b.onclick=declineCall);$$('[data-call-accept]').forEach(b=>b.onclick=acceptCall);$$('[data-call-hangup]').forEach(b=>b.onclick=endCall);
+  on("[data-photo-index]", (b) => openPhoto(b.dataset.photoIndex));
+  on("[data-close-photo]", closePhoto);
+  on("[data-photo-next]", () => movePhoto(1));
+  on("[data-photo-prev]", () => movePhoto(-1));
+  on("[data-photo-options]", () =>
+    toast("Photo " + (state.photoIndex + 1) + " · Archives KAIROS"),
+  );
+  on("[data-hot]", (b) =>
+    navigate(renderInstagram, b.dataset.hot.replace("insta-", "")),
+  );
+  on("[data-call-decline]", declineCall);
+  on("[data-call-accept]", acceptCall);
+  on("[data-call-hangup]", endCall);
+  on("[data-call-control]", (b) => {
+    const active = b.getAttribute("aria-pressed") !== "true";
+    b.setAttribute("aria-pressed", String(active));
+    if (b.dataset.callControl === "keypad")
+      $("#callKeypad").classList.toggle("hidden", !active);
+    if (b.dataset.callControl === "speaker") {
+      const a = $("#callAudio");
+      if (a?.paused) a.play().catch(() => toast("Lecture indisponible"));
+    }
+  });
+  on("[data-call-digit]", (b) => toast(b.textContent, 500));
+  on("[data-phone-tab]", (b) => {
+    state.currentView = { renderer: renderPhone, args: [b.dataset.phoneTab] };
+    renderPhone(b.dataset.phoneTab);
+  });
+  on("[data-call-info]", (b) =>
+    showSheet(
+      b.dataset.callInfo,
+      "mobile · " +
+        (b.dataset.callInfo === "Numéro inconnu"
+          ? "Appel manqué"
+          : "Dernier appel aujourd’hui"),
+      [
+        {
+          label: "Appeler",
+          run: () => toast("Ce correspondant est indisponible"),
+        },
+      ],
+    ),
+  );
+  on("[data-dial]", (b) => {
+    if ($("#dialNumber").textContent.length < 18)
+      $("#dialNumber").textContent += b.dataset.dial;
+  });
+  on(
+    "[data-dial-delete]",
+    () =>
+      ($("#dialNumber").textContent = $("#dialNumber").textContent.slice(
+        0,
+        -1,
+      )),
+  );
+  on("[data-dial-call]", () =>
+    toast(
+      $("#dialNumber").textContent
+        ? "Le correspondant est indisponible"
+        : "Composez un numéro",
+    ),
+  );
+  on("[data-contact-call]", () =>
+    showSheet("Correspondant indisponible", "Aucune réponse pour le moment."),
+  );
+  on("[data-player-toggle]", () => audioManager.toggle());
+  on("[data-player-next]", () => audioManager.next());
+  on("[data-player-prev]", () => audioManager.next(-1));
+  $$("[data-player-seek]").forEach(
+    (el) =>
+      (el.oninput = () =>
+        audioManager.seek(
+          (Number(el.value) / 100) * audioManager.state.duration,
+        )),
+  );
+  on("[data-track]", (b) => {
+    const t = [...ALBUM_TRACKS, ...audioManager.available()].find(
+      (t) => t.id === b.dataset.track,
+    );
+    if (t) audioManager.play(t);
+  });
+  on("[data-music-album]", () => navigate(renderMusic, "album"));
+  on("[data-music-library]", () => navigate(renderMusic));
+  on("[data-now-open]", () => {
+    const t = audioManager.state.currentTrack;
+    if (t) navigate(renderAudio, t.id);
+    else toast("Choisissez un fichier audio");
+  });
+  on("[data-album-play]", () =>
+    toast("Les fichiers de l’album ne sont pas encore sur cet iPhone"),
+  );
+  on("[data-shuffle]", (b) => {
+    audioManager.state.shuffle = !audioManager.state.shuffle;
+    b.setAttribute("aria-pressed", String(audioManager.state.shuffle));
+    const tracks = audioManager.available();
+    if (tracks.length)
+      audioManager.play(tracks[Math.floor(Math.random() * tracks.length)]);
+    else toast("Aucun fichier audio déverrouillé");
+  });
+  on("[data-music-search]", () =>
+    showSheet(
+      "Rechercher",
+      "Sur cet iPhone",
+      [...ALBUM_TRACKS, ...audioManager.available()].map((t) => ({
+        label: t.title,
+        run: () =>
+          t.src ? audioManager.play(t) : navigate(renderMusic, "album"),
+      })),
+    ),
+  );
+  on("[data-open-camera]", () => navigate(renderCamera));
+  on("[data-camera-gallery]", () => navigate(renderPhotos));
+  on("[data-camera-flash]", (b) => {
+    b.classList.toggle("selected");
+    b.setAttribute("aria-pressed", String(b.classList.contains("selected")));
+  });
+  on("[data-camera-live]", (b) => {
+    b.classList.toggle("selected");
+    toast(
+      "Live Photo " +
+        (b.classList.contains("selected") ? "activé" : "désactivé"),
+    );
+  });
+  on("[data-camera-options]", () => toast("PHOTO · 4:3 · HD"));
+  on("[data-camera-mode]", (b) => {
+    $$("[data-camera-mode]").forEach((x) =>
+      x.classList.toggle("active", x === b),
+    );
+    toast(
+      b.textContent === "PHOTO"
+        ? "Mode photo"
+        : "Aperçu " + b.textContent.toLowerCase(),
+    );
+  });
+  on("[data-zoom]", (b) => {
+    $$("[data-zoom]").forEach((x) => x.classList.toggle("active", x === b));
+    $(".camera-app video").style.transform =
+      `scale(${Math.max(1, Number(b.dataset.zoom))})`;
+  });
+  on("[data-camera-flip]", () =>
+    $(".camera-app video").classList.toggle("mirrored"),
+  );
+  on("[data-shutter]", () => {
+    const f = $(".camera-flash");
+    f.classList.remove("flash");
+    void f.offsetWidth;
+    f.classList.add("flash");
+    toast("Photo prise · aperçu", 1000);
+  });
+  on("[data-setting-toggle]", (b) => {
+    const el = $(".switch", b),
+      active = !el.classList.contains("on");
+    el.classList.toggle("on", active);
+    el.setAttribute("aria-checked", String(active));
+  });
+  on("[data-setting-detail]", (b) =>
+    navigate(renderSettingDetail, b.dataset.settingDetail),
+  );
+  on("[data-month]", (b) => {
+    state.currentView = {
+      renderer: renderCalendar,
+      args: [Number(b.dataset.month)],
+    };
+    renderCalendar(Number(b.dataset.month));
+  });
+  on("[data-calendar-day]", (b) => {
+    $$("[data-calendar-day]").forEach((x) =>
+      x.classList.toggle("selected", x === b),
+    );
+    $("#calendarAgenda").innerHTML =
+      Number(b.dataset.calendarMonth) === 9 &&
+      Number(b.dataset.calendarDay) === 29
+        ? '<div class="calendar-event"><h3>KAIROS — sortie album</h3><p>Toute la journée</p></div>'
+        : '<p class="empty-search">Aucun événement ce jour</p>';
+  });
+  on("[data-options]", () =>
+    showSheet("Options", "Archives de KAIROS", [
+      { label: "Retour à l’accueil", run: goHome },
+    ]),
+  );
+  on("[data-message-filter]", () =>
+    showSheet("Messages", "Filtrer les conversations", [
+      { label: "Tous les messages", run: () => filterMessages(false) },
+      { label: "Non lus", run: () => filterMessages(true) },
+    ]),
+  );
+  on("[data-compose]", () =>
+    showSheet(
+      "Nouveau message",
+      "Choisissez un contact",
+      Object.entries(IMessageThreads).map(([id, t]) => ({
+        label: t.name,
+        run: () => navigate(renderMessageThread, id),
+      })),
+    ),
+  );
+  on("[data-wa-compose]", () =>
+    showSheet(
+      "Nouvelle discussion",
+      "Choisissez un contact",
+      Object.entries(WAThreads).map(([id, t]) => ({
+        label: t.name,
+        run: () => navigate(renderWAThread, id),
+      })),
+    ),
+  );
+  on("[data-wa-filter]", (b) => {
+    $$("[data-wa-filter]").forEach((x) => {
+      x.classList.toggle("active", x === b);
+      x.setAttribute("aria-pressed", String(x === b));
+    });
+    applySearch();
+  });
+  $$("[data-search]").forEach((input) => (input.oninput = applySearch));
+  $$("[data-reply]").forEach((form) => {
+    $$("button", form).forEach((b) => {
+      if (!b.hasAttribute("type")) b.type = "button";
+    });
+    form.onsubmit = (e) => {
+      e.preventDefault();
+      const field = $("input", form),
+        text = field.value.trim();
+      if (!text) return;
+      const key = form.dataset.reply + "-" + form.dataset.thread;
+      (state.messages[key] ??= []).push(["me", text]);
+      const { renderer, args } = state.currentView;
+      renderer(...args);
+      const area = $(".bubble-area,.wa-chat");
+      area.scrollTop = area.scrollHeight;
+    };
+  });
+  on("[data-attach]", () =>
+    showSheet("Joindre", "Sur cet iPhone", [
+      { label: "Photos", run: () => navigate(renderPhotos) },
+      { label: "Fichiers", run: () => navigate(renderFiles) },
+    ]),
+  );
+  on("[data-share]", () =>
+    showSheet("Partager", "Les archives restent sur ce téléphone.", [
+      {
+        label: "Copier le lien de l’album",
+        run: async () => {
+          try {
+            await navigator.clipboard.writeText(ALBUM_URL);
+            toast("Lien copié");
+          } catch {
+            toast("Copie indisponible dans ce navigateur");
+          }
+        },
+      },
+    ]),
+  );
 }
-function route(name){
-  if(name==='messages')return renderMessages();if(name==='photos')return renderPhotos();if(name==='notes')return renderNotes();if(name==='files')return renderFiles();
-  if(name==='camera')return renderCamera();if(name==='music')return renderMusic();if(name==='whatsapp')return renderWhatsApp();if(name==='spotify')return renderSpotify();
-  if(name==='instagram')return renderInstagram();if(name==='settings')return renderSettings();if(name==='calendar')return renderCalendar();if(name==='facetime')return renderFaceTime();
-  if(name==='phone'){if(!callHandled)return triggerIncomingCall();return renderPhone()}
-  if(name==='safari'){window.open(ALBUM_URL,'_blank','noopener')}
+function filterMessages(unread) {
+  $$("[data-msg-thread]").forEach((b) =>
+    b.classList.toggle("hidden", unread && !$(".unread-dot.visible", b)),
+  );
+}
+function applySearch() {
+  const input = $("[data-search]"),
+    q = (input?.value || "").toLocaleLowerCase("fr").trim(),
+    filter = $("[data-wa-filter].active")?.dataset.waFilter || "0";
+  let count = 0;
+  $$("[data-searchable]").forEach((row) => {
+    const match =
+      row.dataset.searchable.toLocaleLowerCase("fr").includes(q) &&
+      (filter === "0" ||
+        (filter === "1" && row.dataset.unread === "1") ||
+        (filter === "2" && row.dataset.favorite === "1") ||
+        (filter === "3" && row.dataset.group === "1"));
+    row.classList.toggle("hidden", !match);
+    if (match) count++;
+  });
+  $$(".note-section").forEach((section) =>
+    section.classList.toggle("hidden", !$(".note-row:not(.hidden)", section)),
+  );
+  $(".empty-search")?.classList.toggle("hidden", count > 0);
+}
+function showSheet(title, description, actions = []) {
+  const previousFocus = document.activeElement;
+  setModalInert();
+  modal.className = "modal sheet-modal";
+  modal.setAttribute("role", "dialog");
+  modal.setAttribute("aria-modal", "true");
+  modal.setAttribute("aria-label", title);
+  modal.innerHTML = `<div class="action-sheet"><h3>${escapeHTML(title)}</h3><p>${escapeHTML(description)}</p>${actions.map((a, i) => `<button data-sheet-action="${i}">${escapeHTML(a.label)}</button>`).join("")}<button class="sheet-cancel">Fermer</button></div>`;
+  $$("[data-sheet-action]").forEach(
+    (b) =>
+      (b.onclick = () => {
+        closeModal();
+        actions[Number(b.dataset.sheetAction)].run();
+      }),
+  );
+  $(".sheet-cancel").onclick = () => {
+    closeModal();
+    if (previousFocus?.isConnected) previousFocus.focus();
+  };
+  $(".sheet-cancel").focus();
+}
+// Dialogs retain keyboard focus. Global audio is paused when a call arrives.
+modal.addEventListener("keydown", (e) => {
+  if (e.key !== "Tab") return;
+  const buttons = $$("button,input", modal).filter(
+    (b) => b.offsetParent !== null,
+  );
+  if (!buttons.length) return;
+  const first = buttons[0],
+    last = buttons.at(-1);
+  if (e.shiftKey && document.activeElement === first) {
+    e.preventDefault();
+    last.focus();
+  } else if (!e.shiftKey && document.activeElement === last) {
+    e.preventDefault();
+    first.focus();
+  }
+});
+
+function route(name) {
+  if (state.callStatus !== "idle") return;
+  if (!state.phoneUnlocked) {
+    state.phoneUnlocked = true;
+    scheduleIncomingCall();
+  }
+  if (name === "safari") {
+    window.open(ALBUM_URL, "_blank", "noopener");
+    return;
+  }
+  const routes = {
+    messages: renderMessages,
+    photos: renderPhotos,
+    notes: renderNotes,
+    files: renderFiles,
+    camera: renderCamera,
+    music: renderMusic,
+    whatsapp: renderWhatsApp,
+    spotify: renderSpotify,
+    instagram: renderInstagram,
+    settings: renderSettings,
+    calendar: renderCalendar,
+    facetime: renderFaceTime,
+    phone: renderPhone,
+  };
+  if (!routes[name]) return;
+  state.navigationStack = [];
+  state.currentView = null;
+  state.currentApp = name;
+  toastEl.classList.add("hidden");
+  navigate(routes[name]);
+  if (name === "phone" && !state.callHandled) triggerIncomingCall();
 }
 
-/* BOOT + GESTURES */
-$('#enterBtn').onclick=()=>{intro.classList.remove('active');phoneScene.classList.add('active');setStatus(true);show(lock)};
-$('#unlockBtn').onclick=()=>{goHome();scheduleIncomingCall()};
-$('#homeIndicator').onclick=goHome;
-let homeGestureY=null;
-$('#homeIndicator').addEventListener('pointerdown',e=>homeGestureY=e.clientY);
-$('#homeIndicator').addEventListener('pointerup',e=>{if(homeGestureY!==null&&homeGestureY-e.clientY>18)goHome();homeGestureY=null});
-document.addEventListener('click',e=>{const b=e.target.closest('[data-route]');if(b){if(lock.classList.contains('active-view'))scheduleIncomingCall();route(b.dataset.route)}});
-
-let gesture=null;
-lock.addEventListener('pointerdown',e=>gesture={x:e.clientX,y:e.clientY});
-lock.addEventListener('pointerup',e=>{if(gesture&&gesture.y-e.clientY>55){goHome();scheduleIncomingCall()}gesture=null});
-appView.addEventListener('pointerdown',e=>gesture={x:e.clientX,y:e.clientY});
-appView.addEventListener('pointerup',e=>{
-  if(!gesture)return;const dx=e.clientX-gesture.x,dy=e.clientY-gesture.y;
-  if(gesture.x<45&&dx>70&&Math.abs(dy)<80)goBack();
-  else if(gesture.y>screen.getBoundingClientRect().bottom-120&&dy<-65)goHome();
-  gesture=null;
+/* BOOT + POINTER GESTURES: coordinates are relative to the phone, including on desktop. */
+$("#enterBtn").onclick = () => {
+  intro.classList.remove("active");
+  phoneScene.classList.add("active");
+  setStatus(true);
+  show(lock);
+};
+$("#unlockBtn").onclick = unlockPhone;
+$("#homeIndicator").onclick = () => {
+  if (lock.classList.contains("active-view")) unlockPhone();
+  else goHome();
+};
+document.addEventListener("click", (e) => {
+  const b = e.target.closest("[data-route]");
+  if (b) route(b.dataset.route);
+});
+let gesture = null,
+  suppressClick = false;
+screen.addEventListener("pointerdown", (e) => {
+  if (
+    e.isPrimary === false ||
+    state.callStatus !== "idle" ||
+    e.target.closest("input,textarea,.modal:not(.hidden)")
+  )
+    return;
+  const r = screen.getBoundingClientRect(),
+    x = e.clientX - r.left,
+    y = e.clientY - r.top;
+  gesture = {
+    id: e.pointerId,
+    x: e.clientX,
+    y: e.clientY,
+    edge: x < 28,
+    home: y > r.height - 44,
+    lock: lock.classList.contains("active-view"),
+    photo: !!$("#photoViewer.open"),
+  };
+});
+screen.addEventListener("pointermove", (e) => {
+  if (!gesture || gesture.id !== e.pointerId) return;
+  const dx = e.clientX - gesture.x,
+    dy = e.clientY - gesture.y;
+  if (
+    (gesture.lock && Math.abs(dy) > 12) ||
+    (gesture.home && Math.abs(dy) > 12) ||
+    (gesture.edge && dx > 12 && dx > Math.abs(dy) * 1.6)
+  )
+    screen.setPointerCapture(e.pointerId);
+});
+screen.addEventListener("pointerup", (e) => {
+  if (!gesture || gesture.id !== e.pointerId) return;
+  const g = gesture;
+  gesture = null;
+  const dx = e.clientX - g.x,
+    dy = e.clientY - g.y;
+  let handled = false;
+  if (g.lock && dy < -55 && Math.abs(dy) > Math.abs(dx) * 1.3) {
+    unlockPhone();
+    handled = true;
+  } else if (g.home && dy < -45 && Math.abs(dy) > Math.abs(dx) * 1.3) {
+    goHome();
+    handled = true;
+  } else if (
+    g.photo &&
+    Math.abs(dx) > 60 &&
+    Math.abs(dx) > Math.abs(dy) * 1.5
+  ) {
+    movePhoto(dx < 0 ? 1 : -1);
+    handled = true;
+  } else if (g.edge && dx > 65 && dx > Math.abs(dy) * 1.6) {
+    goBack();
+    handled = true;
+  }
+  if (handled) {
+    suppressClick = true;
+    setTimeout(() => (suppressClick = false), 350);
+  }
+});
+screen.addEventListener("pointercancel", () => (gesture = null));
+screen.addEventListener(
+  "click",
+  (e) => {
+    if (suppressClick) {
+      e.preventDefault();
+      e.stopImmediatePropagation();
+      suppressClick = false;
+    }
+  },
+  true,
+);
+document.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") {
+    if (state.callStatus === "ringing") return declineCall();
+    if (state.callStatus === "active") return endCall();
+    if (!modal.classList.contains("hidden")) closeModal();
+    else goBack();
+  }
+  if ($("#photoViewer.open")) {
+    if (e.key === "ArrowRight") movePhoto(1);
+    if (e.key === "ArrowLeft") movePhoto(-1);
+  }
 });

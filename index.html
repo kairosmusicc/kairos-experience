@@ -1,93 +1,202 @@
 <!doctype html>
 <html lang="fr">
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,user-scalable=no">
-  <meta name="theme-color" content="#000000">
-  <title>Les archives de KAIROS</title>
-  <link rel="stylesheet" href="styles.css">
-</head>
-<body>
-<main class="experience">
-  <section id="intro" class="intro active">
-    <div class="intro-card">
-      <img src="assets/images/logo.png" alt="Manii & Paapii" class="intro-logo">
-      <p class="eyebrow">ARCHIVES // KAIROS</p>
-      <h1>Le téléphone<br>de KAIROS</h1>
-      <p>Un téléphone. Quelques traces. Deux fichiers qui n’auraient peut-être pas dû rester là.</p>
-      <button id="enterBtn" class="primary">Allumer le téléphone</button>
-    </div>
-  </section>
-
-  <section id="phoneScene" class="phone-scene">
-    <div id="device" class="device">
-      <div class="screen">
-        <div id="statusBar" class="status-bar light-status">
-          <span id="statusTime">00:00</span>
-          <span class="status-icons" aria-hidden="true">
-            <svg viewBox="0 0 24 16" class="status-cell"><rect x="1" y="10" width="3" height="5" rx="1"/><rect x="6" y="7" width="3" height="8" rx="1"/><rect x="11" y="4" width="3" height="11" rx="1"/><rect x="16" y="1" width="3" height="14" rx="1"/></svg>
-            <svg viewBox="0 0 22 16" class="status-wifi"><path d="M1.5 5.8C7.2.8 14.8.8 20.5 5.8M5 9c3.7-3.1 8.3-3.1 12 0M8.6 12.1c1.5-1.2 3.3-1.2 4.8 0" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"/></svg>
-            <span class="battery-pill"><span id="batteryLevel">76</span></span>
-          </span>
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width,initial-scale=1,viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#000000" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta
+      name="apple-mobile-web-app-status-bar-style"
+      content="black-translucent"
+    />
+    <title>Les archives de KAIROS</title>
+    <link rel="stylesheet" href="styles.css" />
+    <link rel="icon" href="assets/icons/music.png" />
+  </head>
+  <body>
+    <main class="experience">
+      <section id="intro" class="intro active">
+        <div class="intro-card">
+          <img
+            src="assets/images/logo.png"
+            alt="Manii & Paapii"
+            class="intro-logo"
+          />
+          <p class="eyebrow">ARCHIVES // KAIROS</p>
+          <h1>Le téléphone<br />de KAIROS</h1>
+          <p>
+            Un téléphone. Quelques traces. Deux fichiers qui n’auraient
+            peut-être pas dû rester là.
+          </p>
+          <button id="enterBtn" class="primary">Allumer le téléphone</button>
         </div>
-        <div class="dynamic-island"></div>
+      </section>
 
-        <section id="lock" class="view lock-view active-view">
-          <div class="lock-overlay"></div>
-          <div class="lock-center">
-            <div id="lockDate" class="lock-date"></div>
-            <div id="lockTime" class="lock-time"></div>
-            <div class="lock-copy">Tu as trouvé le téléphone de KAIROS.</div>
+      <section id="phoneScene" class="phone-scene">
+        <div id="device" class="device">
+          <div class="screen">
+            <div id="statusBar" class="status-bar light-status">
+              <span id="statusTime">00:00</span>
+              <span class="status-icons" aria-hidden="true">
+                <svg viewBox="0 0 24 16" class="status-cell">
+                  <rect x="1" y="10" width="3" height="5" rx="1" />
+                  <rect x="6" y="7" width="3" height="8" rx="1" />
+                  <rect x="11" y="4" width="3" height="11" rx="1" />
+                  <rect x="16" y="1" width="3" height="14" rx="1" />
+                </svg>
+                <svg viewBox="0 0 22 16" class="status-wifi">
+                  <path
+                    d="M1.5 5.8C7.2.8 14.8.8 20.5 5.8M5 9c3.7-3.1 8.3-3.1 12 0M8.6 12.1c1.5-1.2 3.3-1.2 4.8 0"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="2"
+                    stroke-linecap="round"
+                  />
+                </svg>
+                <span class="battery-pill"
+                  ><span id="batteryLevel">76</span></span
+                >
+              </span>
+            </div>
+            <div class="dynamic-island"></div>
+
+            <section id="lock" class="view lock-view active-view">
+              <div class="lock-overlay"></div>
+              <div class="lock-center">
+                <div id="lockDate" class="lock-date"></div>
+                <div id="lockTime" class="lock-time"></div>
+                <div class="lock-copy">
+                  Tu as trouvé le téléphone de KAIROS.
+                </div>
+              </div>
+              <div class="lock-notifications">
+                <button class="lock-notif" data-route="messages">
+                  <img src="assets/icons/messages.png" alt="" />
+                  <div>
+                    <b>Messages</b><small>maintenant</small
+                    ><strong>Paapii</strong>
+                    <p>frérot t’as gardé le fichier ?</p>
+                  </div>
+                </button>
+                <button class="lock-notif" data-route="whatsapp">
+                  <img src="assets/icons/whatsapp.png" alt="" />
+                  <div>
+                    <b>WhatsApp</b><small>2 min</small><strong>Paapii</strong>
+                    <p>j’ai retrouvé un truc</p>
+                  </div>
+                </button>
+              </div>
+              <button id="unlockBtn" class="unlock">
+                Balayer vers le haut pour ouvrir
+              </button>
+            </section>
+
+            <section id="home" class="view home-view">
+              <div class="home-shade"></div>
+              <div class="home-grid">
+                <button class="app-icon" data-route="messages">
+                  <img alt="" src="assets/icons/messages.png" /><span
+                    >Messages</span
+                  >
+                </button>
+                <button class="app-icon" data-route="calendar">
+                  <span class="calendar-icon"
+                    ><b id="calendarDay">5</b><small>JEU.</small></span
+                  ><span>Calendrier</span>
+                </button>
+                <button class="app-icon" data-route="photos">
+                  <img alt="" src="assets/icons/photos.png" /><span
+                    >Photos</span
+                  >
+                </button>
+                <button class="app-icon" data-route="camera">
+                  <img alt="" src="assets/icons/camera.png" /><span
+                    >Appareil photo</span
+                  >
+                </button>
+
+                <button class="app-icon" data-route="facetime">
+                  <span class="app-art"
+                    ><img alt="" src="assets/icons/facetime.png" /></span
+                  ><span>FaceTime</span>
+                </button>
+                <button class="app-icon" data-route="notes">
+                  <img alt="" src="assets/icons/notes.png" /><span>Notes</span>
+                </button>
+                <button class="app-icon" data-route="files">
+                  <img alt="" src="assets/icons/files.png" /><span
+                    >Fichiers</span
+                  >
+                </button>
+                <button class="app-icon" data-route="music">
+                  <img alt="" src="assets/icons/music.png" /><span
+                    >Musique</span
+                  >
+                </button>
+
+                <button class="app-icon has-badge" data-route="whatsapp">
+                  <img alt="" src="assets/icons/whatsapp.png" /><i>1</i
+                  ><span>WhatsApp</span>
+                </button>
+                <button class="app-icon" data-route="spotify">
+                  <img alt="" src="assets/icons/spotify.png" /><span
+                    >Spotify</span
+                  >
+                </button>
+                <button class="app-icon" data-route="instagram">
+                  <img alt="" src="assets/icons/instagram.png" /><span
+                    >Instagram</span
+                  >
+                </button>
+                <button class="app-icon" data-route="settings">
+                  <span class="app-art"
+                    ><img alt="" src="assets/icons/settings.png" /></span
+                  ><span>Réglages</span>
+                </button>
+              </div>
+
+              <div class="home-page-dots" aria-hidden="true">
+                <i></i><i></i>
+              </div>
+              <div class="dock liquid">
+                <button data-route="phone" aria-label="Téléphone">
+                  <img src="assets/icons/phone.png" alt="Téléphone" />
+                </button>
+                <button data-route="messages">
+                  <img src="assets/icons/messages.png" alt="Messages" />
+                </button>
+                <button data-route="safari" aria-label="Safari">
+                  <img src="assets/icons/safari.png" alt="Safari" />
+                </button>
+                <button data-route="music">
+                  <img src="assets/icons/music.png" alt="Musique" />
+                </button>
+              </div>
+            </section>
+
+            <section id="appView" class="view app-view">
+              <div id="appContent" class="app-content"></div>
+            </section>
+
+            <div id="modal" class="modal hidden"></div>
+            <div
+              id="toast"
+              class="toast hidden"
+              role="status"
+              aria-live="polite"
+            ></div>
+            <button
+              id="homeIndicator"
+              class="home-indicator"
+              aria-label="Retour à l’accueil"
+            ></button>
           </div>
-          <div class="lock-notifications">
-            <button class="lock-notif" data-route="messages">
-              <img src="assets/icons/messages.png" alt="">
-              <div><b>Messages</b><small>maintenant</small><strong>Paapii</strong><p>frérot t’as gardé le fichier ?</p></div>
-            </button>
-            <button class="lock-notif" data-route="whatsapp">
-              <img src="assets/icons/whatsapp.png" alt="">
-              <div><b>WhatsApp</b><small>2 min</small><strong>Paapii</strong><p>j’ai retrouvé le mix</p></div>
-            </button>
-          </div>
-          <button id="unlockBtn" class="unlock">Balayer vers le haut pour ouvrir</button>
-        </section>
-
-        <section id="home" class="view home-view">
-          <div class="home-shade"></div>
-          <div class="home-grid">
-            <button class="app-icon" data-route="messages"><img src="assets/icons/messages.png"><span>Messages</span></button>
-            <button class="app-icon" data-route="calendar"><span class="calendar-icon"><b id="calendarDay">5</b><small>JEU.</small></span><span>Calendrier</span></button>
-            <button class="app-icon" data-route="photos"><img src="assets/icons/photos.png"><span>Photos</span></button>
-            <button class="app-icon" data-route="camera"><img src="assets/icons/camera.png"><span>Appareil photo</span></button>
-
-            <button class="app-icon" data-route="facetime"><img src="assets/icons/facetime.png"><span>FaceTime</span></button>
-            <button class="app-icon" data-route="notes"><img src="assets/icons/notes.png"><span>Notes</span></button>
-            <button class="app-icon" data-route="files"><img src="assets/icons/files.png"><span>Fichiers</span></button>
-            <button class="app-icon" data-route="music"><img src="assets/icons/music.png"><span>Musique</span></button>
-
-            <button class="app-icon has-badge" data-route="whatsapp"><img src="assets/icons/whatsapp.png"><i>1</i><span>WhatsApp</span></button>
-            <button class="app-icon" data-route="spotify"><img src="assets/icons/spotify.png"><span>Spotify</span></button>
-            <button class="app-icon" data-route="instagram"><img src="assets/icons/instagram.png"><span>Instagram</span></button>
-            <button class="app-icon" data-route="settings"><img src="assets/icons/settings.png"><span>Réglages</span></button>
-          </div>
-
-          <div class="dock liquid">
-            <button data-route="phone"><img src="assets/icons/phone.png" alt="Téléphone"></button>
-            <button data-route="messages"><img src="assets/icons/messages.png" alt="Messages"></button>
-            <button data-route="safari"><img src="assets/icons/safari.png" alt="Safari"></button>
-            <button data-route="music"><img src="assets/icons/music.png" alt="Musique"></button>
-          </div>
-        </section>
-
-        <section id="appView" class="view app-view"><div id="appContent" class="app-content"></div></section>
-
-        <div id="modal" class="modal hidden"></div>
-        <div id="toast" class="toast hidden"></div>
-        <button id="homeIndicator" class="home-indicator" aria-label="Retour à l’accueil"></button>
-      </div>
-    </div>
-  </section>
-</main>
-<script src="app.js"></script>
-</body>
+        </div>
+      </section>
+    </main>
+    <script src="app.js"></script>
+  </body>
 </html>
