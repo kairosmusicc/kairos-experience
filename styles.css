@@ -3392,3 +3392,21 @@ svg.ui {
   min-height: 44px;
   width: 44px;
 }
+/* Preserve the system chrome above an incoming/active call. */
+.screen:has(.call-modal:not(.hidden)) .status-bar {
+  z-index: 101;
+  color: #fff;
+}
+.screen:has(.call-modal:not(.hidden)) .battery-pill {
+  background: #fff;
+  color: #111;
+}
+.screen:has(.call-modal:not(.hidden)) .dynamic-island {
+  z-index: 102;
+}
+.screen:has(.call-modal:not(.hidden)) .home-indicator {
+  z-index: 103;
+}
+.screen:has(.call-modal:not(.hidden)) .home-indicator:after {
+  background: #fff;
+}

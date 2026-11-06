@@ -395,7 +395,7 @@ function renderMessages() {
   );
 }
 function composer(kind, id) {
-  return `<form class="${kind === "im" ? "imessage-compose" : "wa-input"}" data-reply="${kind}" data-thread="${id}">${iconButton("plus", "Joindre un fichier", "data-attach")}<input class="field" name="message" aria-label="${kind === "im" ? "iMessage" : "Message"}" placeholder="${kind === "im" ? "iMessage" : "Message"}" autocomplete="off" maxlength="500">${kind === "wa" ? iconButton("camera", "Appareil photo", "data-open-camera") : ""}<button type="submit" class="send-button" aria-label="Envoyer">${icon("send")}</button></form>`;
+  return `<form class="${kind === "im" ? "imessage-compose" : "wa-input"}" data-reply="${kind}" data-thread="${id}">${iconButton("plus", "Joindre un fichier", "data-attach")}<input class="field" name="message" aria-label="${kind === "im" ? "iMessage" : "Message"}" placeholder="${kind === "im" ? "iMessage" : "Message"}" autocomplete="off" maxlength="500">${kind === "wa" ? iconButton("camera", "Appareil photo", "data-open-camera") : ""}<button type="submit" class="send-button" aria-label="Message audio">${icon("mic")}</button></form>`;
 }
 function threadMessages(kind, id, original) {
   return original.concat(state.messages[kind + "-" + id] || []);
@@ -1332,11 +1332,18 @@ function bindDynamic() {
     $$("button", form).forEach((b) => {
       if (!b.hasAttribute("type")) b.type = "button";
     });
+    const input = $("input", form),
+      send = $(".send-button", form);
+    input.oninput = () => {
+      const hasText = !!input.value.trim();
+      send.innerHTML = icon(hasText ? "send" : "mic");
+      send.setAttribute("aria-label", hasText ? "Envoyer" : "Message audio");
+    };
     form.onsubmit = (e) => {
       e.preventDefault();
       const field = $("input", form),
         text = field.value.trim();
-      if (!text) return;
+      if (!text) return toast("Le micro de ce téléphone est indisponible");
       const key = form.dataset.reply + "-" + form.dataset.thread;
       (state.messages[key] ??= []).push(["me", text]);
       const { renderer, args } = state.currentView;

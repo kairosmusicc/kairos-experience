@@ -71,7 +71,9 @@ with sync_playwright() as p:
         page.click('[data-msg-thread="paapii"]')
         assert page.locator('.bubble-area').inner_text().find('retourne-la') > 0
         page.screenshot(path=str(OUT / f'{label}-messages.png'))
+        assert page.locator('.send-button').get_attribute('aria-label') == 'Message audio'
         page.fill('[data-reply] input', 'je regarde')
+        assert page.locator('.send-button').get_attribute('aria-label') == 'Envoyer'
         page.click('[data-reply] [type="submit"]')
         assert 'je regarde' in page.locator('.bubble-area').inner_text()
         r = page.locator('.screen').bounding_box()
@@ -162,6 +164,7 @@ with sync_playwright() as p:
         assert page.evaluate('window.__openedURL') == 'https://album.link/qzsdrsh5r3m8j'
         app(page, 'phone')
         assert page.locator('[data-call-accept]').is_visible()
+        assert page.locator('#statusBar').evaluate('el=>getComputedStyle(el).zIndex') == '101'
         page.screenshot(path=str(OUT / f'{label}-call.png'))
         page.click('[data-call-accept]')
         page.wait_for_function('document.querySelector("#callAudio").currentTime>0')
