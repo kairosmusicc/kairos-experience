@@ -1696,24 +1696,6 @@ svg.ui {
   display: grid;
   place-items: center;
 }
-.home-page-dots {
-  position: absolute;
-  bottom: calc(131px + var(--safe-bottom));
-  left: 0;
-  right: 0;
-  display: flex;
-  justify-content: center;
-  gap: 7px;
-}
-.home-page-dots i {
-  height: 6px;
-  width: 6px;
-  border-radius: 50%;
-  background: #ffffff60;
-}
-.home-page-dots i:first-child {
-  background: #fff;
-}
 .lock-center {
   top: 18%;
 }
@@ -3409,4 +3391,115 @@ svg.ui {
 }
 .screen:has(.call-modal:not(.hidden)) .home-indicator:after {
   background: #fff;
+}
+/* RC: quiet session notification; existing app and home geometry stays intact. */
+.story-notification {
+  position: absolute;
+  z-index: 98;
+  top: calc(var(--status-height) + 8px);
+  left: 12px;
+  right: 12px;
+  border-radius: 23px;
+  background: #f7f7f7e8;
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  box-shadow:
+    0 8px 30px #0002,
+    inset 0 1px 0 #fff;
+  display: flex;
+  animation: story-arrive 0.3s ease-out;
+  color: #111;
+}
+.story-open {
+  border: 0;
+  background: none;
+  padding: 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  text-align: left;
+  flex: 1;
+  min-width: 0;
+  border-radius: 23px;
+}
+.story-open img {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+}
+.story-open > span {
+  flex: 1;
+  min-width: 0;
+}
+.story-open small {
+  display: block;
+  font-size: 10px;
+  color: #777;
+  letter-spacing: 0.6px;
+  margin-bottom: 5px;
+}
+.story-open time {
+  float: right;
+  letter-spacing: 0;
+}
+.story-open b {
+  display: block;
+  font-size: 15px;
+  margin-bottom: 2px;
+}
+.story-open span span {
+  font-size: 13px;
+}
+.story-dismiss {
+  border: 0;
+  background: none;
+  min-width: 44px;
+  align-self: start;
+  height: 44px;
+  padding: 12px;
+  color: #888;
+}
+.story-dismiss .ui {
+  width: 16px;
+  height: 16px;
+}
+.discovery-feedback {
+  animation: discovery-feedback 0.4s ease-out;
+}
+.calendar-grid .has-event {
+  position: relative;
+}
+.calendar-grid .has-event:after {
+  content: "";
+  position: absolute;
+  bottom: 3px;
+  left: calc(50% - 2px);
+  width: 4px;
+  height: 4px;
+  background: currentColor;
+  border-radius: 50%;
+}
+@keyframes story-arrive {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes discovery-feedback {
+  50% {
+    opacity: 0.85;
+  }
+  100% {
+    opacity: 1;
+  }
+}
+@media (prefers-reduced-motion: reduce) {
+  .story-notification,
+  .discovery-feedback {
+    animation: none;
+  }
 }

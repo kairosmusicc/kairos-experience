@@ -62,7 +62,7 @@ with sync_playwright() as p:
         swipe(page, r['x']+180, r['y']+r['height']-100, r['x']+180, r['y']+r['height']-260)
         assert page.locator('#home.active-view').count() == 1
         # Isolate long app checks from the separately tested 35-second interruption.
-        page.evaluate('clearTimeout(callTimer)')
+        page.evaluate('clearTimeout(callTimer);state.firstUnlockedAt=Date.now()+3600000')
         page.screenshot(path=str(OUT / f'{label}-home.png'))
         assert page.locator('#home img').evaluate_all('(imgs)=>imgs.every(i=>i.complete&&i.naturalWidth>0)')
         app(page, 'messages')
@@ -119,7 +119,7 @@ with sync_playwright() as p:
         page.click('[data-music-album]')
         assert page.locator('[data-track^="album-"]').count() == 8
         page.click('[data-track="album-0"]', force=True)
-        assert page.locator('#toast').inner_text().find('pas encore') >= 0
+        assert page.locator('#toast').inner_text() == 'Audio indisponible'
         page.click('[data-track="tout"]')
         page.wait_for_function('audioManager.state.currentTrack.id==="tout" && !audioManager.audio.paused')
         page.screenshot(path=str(OUT / f'{label}-music.png'))

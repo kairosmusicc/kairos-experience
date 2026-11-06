@@ -15,6 +15,9 @@
     <title>Les archives de KAIROS</title>
     <link rel="stylesheet" href="styles.css" />
     <link rel="icon" href="assets/icons/music.png" />
+    <link rel="manifest" href="manifest.webmanifest" />
+    <link rel="apple-touch-icon" href="assets/pwa/kairos-192.png" />
+    <meta name="apple-mobile-web-app-title" content="KAIROS" />
   </head>
   <body>
     <main class="experience">
@@ -157,10 +160,6 @@
                   ><span>Réglages</span>
                 </button>
               </div>
-
-              <div class="home-page-dots" aria-hidden="true">
-                <i></i><i></i>
-              </div>
               <div class="dock liquid">
                 <button data-route="phone" aria-label="Téléphone">
                   <img src="assets/icons/phone.png" alt="Téléphone" />
@@ -181,6 +180,11 @@
               <div id="appContent" class="app-content"></div>
             </section>
 
+            <aside
+              id="storyNotification"
+              class="story-notification hidden"
+              aria-live="polite"
+            ></aside>
             <div id="modal" class="modal hidden"></div>
             <div
               id="toast"

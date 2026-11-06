@@ -26,18 +26,37 @@ const session = {
     } catch {}
   },
 };
+function storedJSON(key, fallback) {
+  try {
+    return JSON.parse(session.get(key)) ?? fallback;
+  } catch {
+    return fallback;
+  }
+}
+const savedProgress = storedJSON("kairos.progress", {});
 const state = {
   phoneUnlocked: false,
   currentApp: null,
   currentView: null,
   navigationStack: [],
-  callHandled: session.get("kairos.callHandled") === "1",
+  callHandled:
+    session.get("kairos.callHandled") === "1" || !!savedProgress.callTriggered,
+  messagesOpened: !!savedProgress.messagesOpened,
+  paapiiMessageRead: !!savedProgress.paapiiMessageRead,
+  whatsappOpened: !!savedProgress.whatsappOpened,
+  notesOpened: !!savedProgress.notesOpened,
+  callTriggered: !!savedProgress.callTriggered,
+  finalSequenceTriggered: !!savedProgress.finalSequenceTriggered,
+  finalNoteOpened: !!savedProgress.finalNoteOpened,
+  firstUnlockedAt: savedProgress.firstUnlockedAt || 0,
+  visitedApps: new Set(savedProgress.visitedApps || []),
+  callHistory: savedProgress.callHistory || null,
   callStatus: "idle",
   abegUnlocked: session.get("kairos.abeg") === "1",
   toutGacherUnlocked: session.get("kairos.tout") === "1",
   attempts: { abeg: 0, tout: 0 },
   messages: {},
-  read: new Set(),
+  read: new Set(savedProgress.read || []),
   photoIndex: 0,
   musicState: null,
 };
@@ -50,11 +69,17 @@ function navigate(renderer, ...args) {
   renderer(...args);
 }
 function unlockPhone() {
+  if (!state.phoneUnlocked) trackEvent("phone_unlocked");
   state.phoneUnlocked = true;
+  if (!state.firstUnlockedAt) state.firstUnlockedAt = Date.now();
+  persistProgress();
+  systemSounds.play("unlock");
   scheduleIncomingCall();
   goHome();
 }
 
+// Single checked source for the official album artwork.
+const KAIROS_COVER = "assets/images/kairos-cover.jpg";
 const ALBUM_URL = "https://album.link/qzsdrsh5r3m8j";
 const AUDIO = {
   abeg: "assets/audio/abeg.wav",
@@ -319,6 +344,8 @@ function goHome() {
   show(home);
   appContent.innerHTML = "";
   appView.scrollTop = 0;
+  updatePhoneSignals();
+  scheduleFinalNote();
 }
 function openApp(html, { dark = false } = {}) {
   setStatus(dark);
@@ -404,6 +431,9 @@ function renderMessageThread(id) {
   const t = IMessageThreads[id];
   if (!t) return;
   state.read.add("im-" + id);
+  if (id === "paapii") state.paapiiMessageRead = true;
+  persistProgress();
+  updatePhoneSignals();
   const msgs = threadMessages("im", id, t.messages)
     .map(
       (m) =>
@@ -431,6 +461,8 @@ function renderWAThread(id) {
   const t = WAThreads[id];
   if (!t) return;
   state.read.add("wa-" + id);
+  persistProgress();
+  updatePhoneSignals();
   const base = t.offset + t.messages.length * 2;
   const msgs = threadMessages("wa", id, t.messages)
     .map((m, i) => {
@@ -465,6 +497,9 @@ function trySecret(kind, value) {
   if (value.trim().toUpperCase() === (kind === "abeg" ? "1029" : "TIME")) {
     state[kind === "abeg" ? "abegUnlocked" : "toutGacherUnlocked"] = true;
     session.set("kairos." + kind, "1");
+    trackEvent(kind === "abeg" ? "abeg_unlocked" : "tout_gacher_unlocked");
+    briefFeedback("secret");
+    systemSounds.play("fileUnlock");
     // Replace the lock screen in history so back never asks for the password again.
     state.currentView = { renderer: renderAudio, args: [kind] };
     renderAudio(kind);
@@ -510,7 +545,7 @@ const ALBUM_TRACKS = [
   id: "album-" + i,
   title,
   artist: "Manii & Paapii",
-  artwork: "assets/images/gallery-track-1.png",
+  artwork: KAIROS_COVER,
   src: null,
 }));
 const SECRET_TRACKS = [
@@ -540,6 +575,7 @@ class AudioManager {
       isPlaying: false,
       queue: [],
       shuffle: false,
+      artwork: KAIROS_COVER,
     };
     state.musicState = this.state;
     for (const event of [
@@ -557,6 +593,7 @@ class AudioManager {
           : 0;
         this.state.isPlaying = !this.audio.paused;
         syncAudioUI();
+        if (event === "play") briefFeedback("audio");
         if (event === "ended") this.next(1, false);
       });
     this.audio.addEventListener("error", () => {
@@ -570,7 +607,7 @@ class AudioManager {
   }
   load(track, queue = this.available()) {
     if (!track?.src) {
-      toast("Ce titre n’est pas encore sur le téléphone");
+      toast("Audio indisponible");
       return false;
     }
     if (state.callStatus !== "idle") {
@@ -581,6 +618,7 @@ class AudioManager {
     if (this.state.currentTrack?.id !== track.id) {
       this.audio.src = track.src;
       this.state.currentTrack = track;
+      this.state.artwork = track.artwork || KAIROS_COVER;
       this.state.currentTime = 0;
       this.state.duration = 0;
     }
@@ -606,9 +644,25 @@ class AudioManager {
       toast("Touchez Lecture pour démarrer le son");
     }
   }
+  pause() {
+    this.audio.pause();
+  }
+  resume() {
+    return this.play();
+  }
+  previous() {
+    this.next(-1);
+  }
+  stop() {
+    this.audio.pause();
+    this.seek(0);
+    this.state.currentTime = 0;
+    this.state.isPlaying = false;
+    syncAudioUI();
+  }
   toggle() {
-    if (this.audio.paused) this.play();
-    else this.audio.pause();
+    if (this.audio.paused) this.resume();
+    else this.pause();
   }
   next(direction = 1, manual = true) {
     const q = this.state.queue;
@@ -649,7 +703,7 @@ function syncAudioUI() {
     (el) => (el.textContent = t?.title || "Aucune lecture"),
   );
   $$("[data-now-art]").forEach((el) => {
-    el.src = t?.artwork || "assets/images/gallery-track-1.png";
+    el.src = t?.artwork || KAIROS_COVER;
   });
   $$("[data-player-time]").forEach(
     (el) => (el.textContent = mediaTime(m.currentTime)),
@@ -672,7 +726,7 @@ function syncAudioUI() {
   );
 }
 function miniPlayer() {
-  return `<div class="mini-player liquid"><button class="mini-info" data-now-open><img data-now-art src="assets/images/gallery-track-1.png" alt="Pochette"><span><b data-now-title>Aucune lecture</b><small>Manii & Paapii</small></span></button>${iconButton("play", "Lecture", "data-player-toggle")}${iconButton("next", "Morceau suivant", "data-player-next")}</div>`;
+  return `<div class="mini-player liquid"><button class="mini-info" data-now-open><img data-now-art src="${KAIROS_COVER}" alt="Pochette"><span><b data-now-title>Aucune lecture</b><small>Manii & Paapii</small></span></button>${iconButton("play", "Lecture", "data-player-toggle")}${iconButton("next", "Morceau suivant", "data-player-next")}</div>`;
 }
 function playerControls() {
   return `<div class="player-seek"><input type="range" min="0" max="100" step="0.1" value="0" aria-label="Progression audio" data-player-seek><div><span data-player-time>0:00</span><span data-player-duration>0:00</span></div></div><div class="controls">${iconButton("previous", "Morceau précédent", "data-player-prev")}<button class="play" data-player-toggle aria-label="Lecture">${icon("play")}</button>${iconButton("next", "Morceau suivant", "data-player-next")}</div>`;
@@ -689,14 +743,14 @@ function musicTrackRows(tracks) {
   return tracks
     .map(
       (t, i) =>
-        `<button class="music-track ${t.src ? "" : "unavailable"}" data-track="${t.id}" aria-disabled="${!t.src}"><span>${t.src ? icon("play") : i + 1}</span><span><b>${t.title}</b><small>${t.src ? "Manii & Paapii" : "Audio à venir"}</small></span>${icon("ellipsis")}</button>`,
+        `<button class="music-track ${t.src ? "" : "unavailable"}" data-track="${t.id}" data-audio-available="${!!t.src}"><span>${t.src ? icon("play") : i + 1}</span><span><b>${t.title}</b><small>${t.src ? "Manii & Paapii" : "Audio à venir"}</small></span>${icon("ellipsis")}</button>`,
     )
     .join("");
 }
 function renderMusic(view = "library") {
   const available = audioManager.available();
-  const library = `<div class="list-toolbar"><span>Bibliothèque</span>${iconButton("ellipsis", "Options", "data-options")}</div><h1 class="section-title">Bibliothèque</h1><div class="library-categories"><button data-music-album>${icon("contacts")} Artistes ${icon("back")}</button><button data-music-album>${icon("file")} Albums ${icon("back")}</button><button data-music-album>${icon("music")} Morceaux ${icon("back")}</button></div><h2 class="subheading">Ajouts récents</h2><button class="album-tile" data-music-album><img src="assets/images/gallery-track-1.png" alt="Pochette KAIROS"><b>KAIROS</b><span>Manii & Paapii</span></button>${available.length ? `<h2 class="subheading">Sur cet iPhone</h2>${musicTrackRows(available)}` : '<p class="muted library-hint">Quelques fichiers sont restés dans les archives.</p>'}`;
-  const album = `${nav("Bibliothèque", "•••")}<div class="album-header"><img src="assets/images/gallery-track-1.png" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii</p><small>ALBUM · 8 MORCEAUX</small></div><div class="album-actions"><button data-album-play>${icon("play")} Lecture</button><button data-shuffle>${icon("shuffle")} Aléatoire</button></div><div>${musicTrackRows(ALBUM_TRACKS)}</div><p class="muted album-notice">Les morceaux de l’album ne sont pas encore stockés sur cet iPhone.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}`;
+  const library = `<div class="list-toolbar"><span>Bibliothèque</span>${iconButton("ellipsis", "Options", "data-options")}</div><h1 class="section-title">Bibliothèque</h1><div class="library-categories"><button data-music-album>${icon("contacts")} Artistes ${icon("back")}</button><button data-music-album>${icon("file")} Albums ${icon("back")}</button><button data-music-album>${icon("music")} Morceaux ${icon("back")}</button></div><h2 class="subheading">Ajouts récents</h2><button class="album-tile" data-music-album><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><b>KAIROS</b><span>Manii & Paapii</span></button>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : '<p class="muted library-hint">Quelques fichiers sont restés dans les archives.</p>'}`;
+  const album = `${nav("Bibliothèque", "•••")}<div class="album-header"><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii</p><small>ALBUM · 8 MORCEAUX</small></div><div class="album-actions"><button data-album-play>${icon("play")} Lecture</button><button data-shuffle>${icon("shuffle")} Aléatoire</button></div><div>${musicTrackRows(ALBUM_TRACKS)}</div><p class="muted album-notice">Les morceaux de l’album ne sont pas encore stockés sur cet iPhone.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}`;
   openApp(
     `<div class="music-app">${view === "album" ? album : library}${miniPlayer()}<div class="music-tabs"><button class="active" data-music-library>${icon("file")}<span>Bibliothèque</span></button><button data-music-album>${icon("music")}<span>KAIROS</span></button><button data-music-search>${icon("search")}<span>Rechercher</span></button></div></div>`,
   );
@@ -801,6 +855,16 @@ function noteDate(n, full = false) {
         : { day: "numeric", month: "short" },
   );
 }
+const FINAL_NOTE = {
+  id: "final-0243",
+  title: "02:43",
+  section: "Épinglées",
+  offset: 0,
+  body: "On pense toujours qu’on aura le temps.\n\nPour dire quelque chose.\nPour revenir.\nPour appeler.\nPour finir ce qu’on avait commencé.\n\nEt puis parfois,\nquelques minutes suffisent.\n\nKAIROS.\n\n29.10.26",
+};
+function sessionNotes() {
+  return state.finalSequenceTriggered ? [FINAL_NOTE, ...NOTES] : NOTES;
+}
 function renderNotes() {
   openApp(
     `<div class="notes-app"><div class="list-toolbar"><span class="notes-account">${icon("folder")} Sur mon iPhone</span>${iconButton("ellipsis", "Options des notes", "data-options")}</div><h1 class="notes-title">Notes</h1>${[
@@ -811,9 +875,8 @@ function renderNotes() {
     ]
       .map(
         (section) =>
-          `<section class="note-section"><h2>${section === "Épinglées" ? icon("pin") : ""}${section}</h2><div class="note-group">${NOTES.filter(
-            (n) => n.section === section,
-          )
+          `<section class="note-section"><h2>${section === "Épinglées" ? icon("pin") : ""}${section}</h2><div class="note-group">${sessionNotes()
+            .filter((n) => n.section === section)
             .map(
               (n) =>
                 `<button class="note-row" data-note="${n.id}" data-searchable="${escapeHTML(n.title + " " + n.body)}"><b>${n.title}</b><span><time>${noteDate(n)}</time> ${escapeHTML(n.body.split("\n")[0])}</span></button>`,
@@ -826,7 +889,12 @@ function renderNotes() {
   );
 }
 function renderNote(id) {
-  const n = NOTES.find((n) => n.id === id);
+  const n = sessionNotes().find((n) => n.id === id);
+  if (n?.id === FINAL_NOTE.id && !state.finalNoteOpened) {
+    state.finalNoteOpened = true;
+    persistProgress();
+    trackEvent("final_note_opened");
+  }
   if (!n) return;
   openApp(
     `<article class="note-detail">${nav("Notes", "•••")}<time class="note-date">${noteDate(n, true)}</time><h1>${n.title}</h1><div class="note-body">${escapeHTML(n.body).replaceAll("\n", "<br>")}</div><footer>${iconButton("share", "Partager la note", "data-share")}${iconButton("search", "Rechercher dans les notes", "data-notes-search")}</footer></article>`,
@@ -846,15 +914,48 @@ function renderSettings() {
 }
 function renderSettingDetail(label) {
   openApp(
-    `<div class="settings-app">${nav(label)}<div class="setting-card">${label === "Général" ? '<div class="setting-row"><span>Nom</span><span>iPhone de KAIROS</span></div><div class="setting-row"><span>Modèle</span><span>iPhone 16 Pro</span></div><div class="setting-row"><span>Version d’iOS</span><span>26.0</span></div>' : label === "Fond d’écran" ? '<img class="wallpaper-preview" src="assets/images/home-wallpaper.jpg" alt="Fond d’écran actuel">' : `<p class="settings-description">${label === "Wi-Fi" ? "Connecté à KAIROS — studio." : "Le téléphone est déverrouillé."}</p>`}</div></div>`,
+    `<div class="settings-app">${nav(label)}<div class="setting-card">${label === "Général" ? '<div class="setting-row"><span>Nom</span><span>iPhone de Manii</span></div><div class="setting-row"><span>Modèle</span><span>iPhone 16 Pro</span></div><div class="setting-row"><span>Version d’iOS</span><span>iOS 26</span></div><div class="setting-row"><span>Capacité</span><span>128 Go</span></div><div class="setting-row"><span>Disponible</span><span>45,6 Go</span></div>' : label === "Fond d’écran" ? '<img class="wallpaper-preview" src="assets/images/home-wallpaper.jpg" alt="Fond d’écran actuel">' : `<p class="settings-description">${label === "Wi-Fi" ? "Connecté à KAIROS — studio." : "Le téléphone est déverrouillé."}</p>`}</div></div>`,
   );
 }
 function renderSpotify() {
   const available = audioManager.available();
   openApp(
-    `<div class="spotify-app">${nav("KAIROS", "•••")}<div class="spotify-hero"><img src="assets/images/gallery-track-1.png" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii · Album</p></div><div class="spot-actions">${iconButton("shuffle", "Lecture aléatoire", "data-shuffle")}<button class="spot-play" data-album-play aria-label="Lire l’album">${icon("play")}</button></div>${musicTrackRows(ALBUM_TRACKS)}<p class="album-notice muted">Les titres de l’album ne sont pas encore disponibles sur ce téléphone.</p>${available.length ? `<h2 class="subheading">Fichiers locaux</h2>${musicTrackRows(available)}` : ""}${miniPlayer()}</div>`,
+    `<div class="spotify-app">${nav("KAIROS", "•••")}<div class="spotify-hero"><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii · Album</p></div><div class="spot-actions">${iconButton("shuffle", "Lecture aléatoire", "data-shuffle")}<button class="spot-play" data-album-play aria-label="Lire l’album">${icon("play")}</button></div>${musicTrackRows(ALBUM_TRACKS)}<p class="album-notice muted">Les titres de l’album ne sont pas encore disponibles sur ce téléphone.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}${miniPlayer()}</div>`,
     { dark: true },
   );
+}
+function calendarEvents(year, month, day) {
+  const now = new Date();
+  const appointments = [
+    { date: new Date(2026, 9, 29), title: "KAIROS", time: "Toute la journée" },
+    ...[
+      [-3, "Shoot cover", "16:30"],
+      [-1, "Exports", "19:00"],
+      [0, "Studio — Zénithal", "21:00"],
+      [2, "Réunion Corentin", "11:30"],
+    ].map(([offset, title, time]) => ({
+      date: new Date(now.getFullYear(), now.getMonth(), now.getDate() + offset),
+      title,
+      time,
+    })),
+  ];
+  return appointments.filter(
+    (e) =>
+      e.date.getFullYear() === year &&
+      e.date.getMonth() === month &&
+      e.date.getDate() === day,
+  );
+}
+function calendarAgenda(year, month, day) {
+  const events = calendarEvents(year, month, day);
+  return events.length
+    ? events
+        .map(
+          (e) =>
+            `<div class="calendar-event"><div class="datebadge">${day}</div><h3>${e.title}</h3><p>${e.time}</p></div>`,
+        )
+        .join("")
+    : '<p class="empty-search">Aucun événement ce jour</p>';
 }
 function renderCalendar(monthOffset = 0) {
   const now = new Date(),
@@ -862,7 +963,7 @@ function renderCalendar(monthOffset = 0) {
     days = new Date(d.getFullYear(), d.getMonth() + 1, 0).getDate(),
     start = (d.getDay() + 6) % 7;
   openApp(
-    `<div class="calendar-app"><div class="list-toolbar">${iconButton("back", "Mois précédent", `data-month="${monthOffset - 1}"`)}<button class="text-button" data-month="0">Aujourd’hui</button>${iconButton("next", "Mois suivant", `data-month="${monthOffset + 1}"`)}</div><h1 class="section-title">${d.toLocaleDateString("fr-FR", { month: "long" })}</h1><p class="calendar-year">${d.getFullYear()}</p><div class="calendar-grid">${["L", "M", "M", "J", "V", "S", "D"].map((x) => `<small>${x}</small>`).join("")}${Array.from({ length: start }, () => "<span></span>").join("")}${Array.from({ length: days }, (_, i) => `<button class="${!monthOffset && i + 1 === now.getDate() ? "today" : ""}" data-calendar-day="${i + 1}" data-calendar-month="${d.getMonth()}">${i + 1}</button>`).join("")}</div><div id="calendarAgenda"><div class="calendar-event"><div class="datebadge">29</div><h3>KAIROS — sortie album</h3><p>29 octobre · Manii & Paapii</p></div></div></div>`,
+    `<div class="calendar-app"><div class="list-toolbar">${iconButton("back", "Mois précédent", `data-month="${monthOffset - 1}"`)}<button class="text-button" data-month="0">Aujourd’hui</button>${iconButton("next", "Mois suivant", `data-month="${monthOffset + 1}"`)}</div><h1 class="section-title">${d.toLocaleDateString("fr-FR", { month: "long" })}</h1><p class="calendar-year">${d.getFullYear()}</p><div class="calendar-grid">${["L", "M", "M", "J", "V", "S", "D"].map((x) => `<small>${x}</small>`).join("")}${Array.from({ length: start }, () => "<span></span>").join("")}${Array.from({ length: days }, (_, i) => `<button class="${!monthOffset && i + 1 === now.getDate() ? "today" : ""} ${calendarEvents(d.getFullYear(), d.getMonth(), i + 1).length ? "has-event" : ""}" data-calendar-day="${i + 1}" data-calendar-month="${d.getMonth()}" data-calendar-year="${d.getFullYear()}">${i + 1}</button>`).join("")}</div><div id="calendarAgenda">${calendarAgenda(d.getFullYear(), d.getMonth(), monthOffset === 0 ? now.getDate() : 1)}</div></div>`,
   );
 }
 function renderFaceTime() {
@@ -872,7 +973,7 @@ function renderFaceTime() {
     ["Yoan", "assets/images/gallery-studio.jpg", 83],
   ];
   openApp(
-    `<div class="facetime-app">${nav("FaceTime", "＋")}<h1 class="section-title">FaceTime</h1><button class="facetime-new" data-contact-call>${icon("video")} Nouveau FaceTime</button><div class="list">${people.map((p) => `<button class="row" data-contact-call>${avatarHTML(p[1], p[0])}<span class="row-copy"><b>${p[0]}</b><span>Appel vidéo</span></span><span class="row-meta">${timeHTML(p[2])} ${icon("video")}</span></button>`).join("")}</div></div>`,
+    `<div class="facetime-app">${nav("FaceTime", "＋")}<h1 class="section-title">FaceTime</h1><button class="facetime-new" data-contact-call>${icon("video")} Nouveau FaceTime</button><div class="list">${people.map((p) => `<button class="row" data-contact-call>${avatarHTML(p[1], p[0])}<span class="row-copy"><b>${p[0]}</b><span>${p[0] === "Corentin" ? "Appel vidéo manqué" : "Appel vidéo entrant"}</span></span><span class="row-meta">${timeHTML(p[2])} ${icon("video")}</span></button>`).join("")}</div></div>`,
   );
 }
 
@@ -882,7 +983,7 @@ function renderPhone(tab = "Récents") {
   const rows = contacts
     .map(
       (name, i) =>
-        `<button class="row" data-call-info="${name}">${avatarHTML("", name)}<span class="row-copy"><b class="${i === 2 ? "missed" : ""}">${name}</b><span>${i === 2 ? "Appel manqué" : "mobile"}</span></span><span class="row-meta">${timeHTML([12, 31, 46, 180][i])} ${icon("info")}</span></button>`,
+        `<button class="row" data-call-info="${name}">${avatarHTML("", name)}<span class="row-copy"><b class="${i === 2 && state.callHistory?.outcome !== "answered" ? "missed" : ""}">${name}</b><span>${i === 2 ? (state.callHistory?.outcome === "answered" ? "Appel entrant" : "Appel manqué") : "mobile"}</span></span><span class="row-meta">${i === 2 && state.callHistory ? `<time>${new Date(state.callHistory.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</time>` : timeHTML([12, 31, 46, 180][i])} ${icon("info")}</span></button>`,
     )
     .join("");
   const dial = `<div class="dialpad"><output id="dialNumber" aria-live="polite"></output><div class="dial-grid">${"123456789*0#"
@@ -916,8 +1017,18 @@ function renderPhone(tab = "Récents") {
   );
 }
 function scheduleIncomingCall() {
-  if (callTimer || state.callHandled || state.callStatus !== "idle") return;
-  callTimer = setTimeout(triggerIncomingCall, 35000);
+  if (
+    state.callHandled ||
+    state.callStatus !== "idle" ||
+    !state.firstUnlockedAt
+  )
+    return;
+  const delay = state.visitedApps.size >= 3 ? 26000 : 35000;
+  clearTimeout(callTimer);
+  callTimer = setTimeout(
+    triggerIncomingCall,
+    Math.max(0, state.firstUnlockedAt + delay - Date.now()),
+  );
 }
 function setModalInert() {
   phoneScene.querySelectorAll(".view").forEach((v) => (v.inert = true));
@@ -929,7 +1040,13 @@ function triggerIncomingCall() {
     callTimer = setTimeout(triggerIncomingCall, 5000);
     return;
   }
-  audioManager.audio.pause();
+  audioManager.pause();
+  state.callTriggered = true;
+  state.callHistory = { outcome: "missed", at: Date.now() };
+  persistProgress();
+  hideFinalNotification();
+  systemSounds.play("incomingCall");
+  briefFeedback("call");
   state.callStatus = "ringing";
   clearTimeout(callTimer);
   callTimer = null;
@@ -949,6 +1066,13 @@ function markCallHandled() {
   callTimer = null;
 }
 function acceptCall() {
+  state.callHistory = {
+    outcome: "answered",
+    at: state.callHistory?.at || Date.now(),
+  };
+  persistProgress();
+  trackEvent("incoming_call_answered");
+  systemSounds.stop();
   markCallHandled();
   state.callStatus = "active";
   callStartedAt = Date.now();
@@ -983,6 +1107,7 @@ function acceptCall() {
   $("[data-call-hangup]").focus();
 }
 function endCall() {
+  systemSounds.stop();
   markCallHandled();
   clearInterval(callInterval);
   const a = $("#callAudio");
@@ -993,12 +1118,16 @@ function endCall() {
   state.callStatus = "idle";
   closeModal();
   toast("Appel terminé");
+  refreshAfterCall();
 }
 function declineCall() {
+  trackEvent("incoming_call_declined");
+  systemSounds.stop();
   markCallHandled();
   state.callStatus = "idle";
   closeModal();
   toast("Appel refusé");
+  refreshAfterCall();
 }
 
 /* screenshot apps */
@@ -1147,7 +1276,9 @@ function bindDynamic() {
       b.dataset.callInfo,
       "mobile · " +
         (b.dataset.callInfo === "Numéro inconnu"
-          ? "Appel manqué"
+          ? state.callHistory?.outcome === "answered"
+            ? "Appel entrant"
+            : "Appel manqué"
           : "Dernier appel aujourd’hui"),
       [
         {
@@ -1202,9 +1333,7 @@ function bindDynamic() {
     if (t) navigate(renderAudio, t.id);
     else toast("Choisissez un fichier audio");
   });
-  on("[data-album-play]", () =>
-    toast("Les fichiers de l’album ne sont pas encore sur cet iPhone"),
-  );
+  on("[data-album-play]", () => toast("Audio à venir"));
   on("[data-shuffle]", (b) => {
     audioManager.state.shuffle = !audioManager.state.shuffle;
     b.setAttribute("aria-pressed", String(audioManager.state.shuffle));
@@ -1283,11 +1412,11 @@ function bindDynamic() {
     $$("[data-calendar-day]").forEach((x) =>
       x.classList.toggle("selected", x === b),
     );
-    $("#calendarAgenda").innerHTML =
-      Number(b.dataset.calendarMonth) === 9 &&
-      Number(b.dataset.calendarDay) === 29
-        ? '<div class="calendar-event"><h3>KAIROS — sortie album</h3><p>Toute la journée</p></div>'
-        : '<p class="empty-search">Aucun événement ce jour</p>';
+    $("#calendarAgenda").innerHTML = calendarAgenda(
+      Number(b.dataset.calendarYear),
+      Number(b.dataset.calendarMonth),
+      Number(b.dataset.calendarDay),
+    );
   });
   on("[data-options]", () =>
     showSheet("Options", "Archives de KAIROS", [
@@ -1438,13 +1567,173 @@ modal.addEventListener("keydown", (e) => {
   }
 });
 
+/* Small session-only progression hooks. No network analytics or personal data. */
+const JOURNEY_EVENTS = new Set([
+  "phone_unlocked",
+  "app_opened",
+  "abeg_unlocked",
+  "tout_gacher_unlocked",
+  "incoming_call_answered",
+  "incoming_call_declined",
+  "final_note_opened",
+  "album_link_clicked",
+]);
+function trackEvent(name, data = {}) {
+  if (!JOURNEY_EVENTS.has(name)) return;
+  const safe = name === "app_opened" ? { app: data.app } : {};
+  window.dispatchEvent(
+    new CustomEvent("kairos:event", { detail: { name, ...safe } }),
+  );
+}
+function persistProgress() {
+  session.set(
+    "kairos.progress",
+    JSON.stringify({
+      messagesOpened: state.messagesOpened,
+      paapiiMessageRead: state.paapiiMessageRead,
+      whatsappOpened: state.whatsappOpened,
+      notesOpened: state.notesOpened,
+      callTriggered: state.callTriggered,
+      callHistory: state.callHistory,
+      finalSequenceTriggered: state.finalSequenceTriggered,
+      finalNoteOpened: state.finalNoteOpened,
+      firstUnlockedAt: state.firstUnlockedAt,
+      visitedApps: [...state.visitedApps],
+      read: [...state.read],
+    }),
+  );
+}
+// No system sound files exist in the supplied assets. Empty cue map intentionally stays silent.
+class SystemSoundManager {
+  constructor(cues = {}) {
+    this.cues = cues;
+    this.enabled = false;
+    this.audio = null;
+  }
+  enable() {
+    this.enabled = true;
+  }
+  async play(cue) {
+    const src = this.cues[cue];
+    if (!this.enabled || !src || document.hidden) return;
+    this.stop();
+    this.audio = new Audio(src);
+    this.audio.volume = 0.12;
+    try {
+      await this.audio.play();
+    } catch {
+      /* Autoplay denial must remain silent. */
+    }
+  }
+  stop() {
+    if (this.audio) {
+      this.audio.pause();
+      this.audio = null;
+    }
+  }
+}
+const systemSounds = new SystemSoundManager();
+function briefFeedback(kind) {
+  if (matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  try {
+    navigator.vibrate?.(kind === "call" ? [18, 70, 18] : 10);
+  } catch {}
+  const el = kind === "secret" ? $(".audio-player") : $(".dynamic-island");
+  // Secret rendering happens immediately after validation, so use its next paint.
+  requestAnimationFrame(() => {
+    const target = kind === "secret" ? $(".audio-player") : el;
+    if (!target) return;
+    target.classList.remove("discovery-feedback");
+    void target.offsetWidth;
+    target.classList.add("discovery-feedback");
+  });
+}
+function updatePhoneSignals() {
+  for (const [app, key] of [
+    ["messages", "im-paapii"],
+    ["whatsapp", "wa-paapii"],
+  ]) {
+    const button = $(`#home .app-icon[data-route="${app}"]`),
+      unread = !state.read.has(key);
+    button.classList.toggle("has-badge", unread);
+    let badge = $("i", button);
+    if (unread && !badge) {
+      badge = document.createElement("i");
+      badge.textContent = "1";
+      button.append(badge);
+    }
+    if (badge) badge.classList.toggle("hidden", !unread);
+    $(`#lock [data-route="${app}"]`)?.classList.toggle("hidden", !unread);
+  }
+  const old = $("#lockCallNotification");
+  if (state.callHistory) {
+    const notification = old || document.createElement("button");
+    notification.id = "lockCallNotification";
+    notification.className = "lock-notif";
+    notification.dataset.route = "phone";
+    notification.innerHTML = `<img src="assets/icons/phone.png" alt=""><div><b>Téléphone</b><small>récent</small><strong>Numéro inconnu</strong><p>${state.callHistory.outcome === "answered" ? "Appel entrant" : "Appel manqué"}</p></div>`;
+    if (!old) $(".lock-notifications").append(notification);
+  }
+}
+let finalTimer = null;
+function hideFinalNotification() {
+  $("#storyNotification").classList.add("hidden");
+}
+function scheduleFinalNote() {
+  clearTimeout(finalTimer);
+  if (
+    !state.abegUnlocked ||
+    !state.toutGacherUnlocked ||
+    state.finalSequenceTriggered
+  )
+    return;
+  finalTimer = setTimeout(() => {
+    if (
+      !home.classList.contains("active-view") ||
+      state.callStatus !== "idle" ||
+      !modal.classList.contains("hidden") ||
+      document.hidden
+    )
+      return;
+    state.finalSequenceTriggered = true;
+    persistProgress();
+    const banner = $("#storyNotification");
+    banner.innerHTML = `<button class="story-open" aria-label="Notes, 02:43, Il reste une dernière chose"><img src="assets/icons/notes.png" alt=""><span><small>NOTES <time>maintenant</time></small><b>02:43</b><span>Il reste une dernière chose.</span></span></button><button class="story-dismiss" aria-label="Fermer la notification">${icon("close")}</button>`;
+    banner.classList.remove("hidden");
+    systemSounds.play("notification");
+    briefFeedback("notification");
+    $(".story-open", banner).onclick = () => {
+      hideFinalNotification();
+      route("notes");
+      navigate(renderNote, FINAL_NOTE.id);
+    };
+    $(".story-dismiss", banner).onclick = hideFinalNotification;
+  }, 1600);
+}
+function refreshAfterCall() {
+  updatePhoneSignals();
+  if (state.currentView?.renderer === renderPhone)
+    renderPhone(...state.currentView.args);
+  if (home.classList.contains("active-view")) scheduleFinalNote();
+}
+// Background tabs never finish the narrative while the visitor is elsewhere.
+document.addEventListener("visibilitychange", () => {
+  if (!document.hidden && home.classList.contains("active-view"))
+    scheduleFinalNote();
+});
+updatePhoneSignals();
+
 function route(name) {
   if (state.callStatus !== "idle") return;
   if (!state.phoneUnlocked) {
     state.phoneUnlocked = true;
+    if (!state.firstUnlockedAt) state.firstUnlockedAt = Date.now();
+    trackEvent("phone_unlocked");
+    persistProgress();
     scheduleIncomingCall();
   }
   if (name === "safari") {
+    trackEvent("album_link_clicked");
     window.open(ALBUM_URL, "_blank", "noopener");
     return;
   }
@@ -1467,6 +1756,16 @@ function route(name) {
   state.navigationStack = [];
   state.currentView = null;
   state.currentApp = name;
+  trackEvent("app_opened", { app: name });
+  if (name === "messages") state.messagesOpened = true;
+  if (name === "whatsapp") state.whatsappOpened = true;
+  if (name === "notes") state.notesOpened = true;
+  if (["messages", "whatsapp", "notes", "files", "music"].includes(name))
+    state.visitedApps.add(name);
+  persistProgress();
+  scheduleIncomingCall();
+  clearTimeout(finalTimer);
+  hideFinalNotification();
   toastEl.classList.add("hidden");
   navigate(routes[name]);
   if (name === "phone" && !state.callHandled) triggerIncomingCall();
@@ -1474,6 +1773,7 @@ function route(name) {
 
 /* BOOT + POINTER GESTURES: coordinates are relative to the phone, including on desktop. */
 $("#enterBtn").onclick = () => {
+  systemSounds.enable();
   intro.classList.remove("active");
   phoneScene.classList.add("active");
   setStatus(true);
