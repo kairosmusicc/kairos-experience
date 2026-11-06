@@ -137,7 +137,8 @@ with sync_playwright() as p:
     page.clock.fast_forward(600);assert page.locator('[data-call-accept]').is_visible()
     page.click('[data-call-decline]');app(page,'phone')
     assert 'Appel manqué' in page.locator('[data-call-info="Numéro inconnu"]').inner_text()
-    home(page);page.clock.fast_forward(60000);assert page.locator('[data-call-accept]').count()==0
+    home(page);page.clock.fast_forward(60100);assert page.locator('[data-call-accept]').is_visible()
+    page.click('[data-call-decline]');page.clock.fast_forward(120000);assert page.locator('[data-call-accept]').count()==0
     clean(evidence);ctx.close()
-    print('PASS RC: each secret alone, organic call at 26s, decline and no repeated call',flush=True)
+    print('PASS RC: each secret alone, organic call at 26s, one recall after decline and no third call',flush=True)
     browser.close()

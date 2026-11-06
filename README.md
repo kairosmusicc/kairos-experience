@@ -21,13 +21,13 @@ Le téléphone occupe l’écran sur mobile et reste dans sa coque sur desktop. 
 
 Les déverrouillages de fichiers et l’appel traité persistent dans `sessionStorage`, avec repli en mémoire lorsque le navigateur refuse le stockage. Les messages saisis restent dans l’état de la page. Les formulaires échappent le contenu utilisateur.
 
-Le lecteur unique gère les fichiers locaux, la progression, la file, les changements de titre et le mini-player. L’appel interrompt la musique et possède son propre flux audio. Il démarre environ 35 secondes après le premier déverrouillage, ramenées à 26 secondes après trois apps significatives, ou immédiatement à la première ouverture de Téléphone.
+Le lecteur unique gère les fichiers locaux, la progression, la file, les changements de titre et le mini-player. L’appel arrête et remet à zéro la musique et possède son propre flux audio. Il démarre environ 35 secondes après le premier déverrouillage, ramenées à 26 secondes après trois apps significatives, ou immédiatement à la première ouverture de Téléphone.
 
 ## Médias disponibles et limites
 
 Trois sources existent : `assets/audio/abeg.wav`, `assets/audio/tout_gacher.wav` et `assets/audio/call-0243.wav`. Les huit titres de l’album sont présents dans la structure `ALBUM_TRACKS` avec `src: null` : aucun audio fictif ne leur est attribué. Les fichiers déverrouillés deviennent accessibles dans les lecteurs Musique et Spotify.
 
-Instagram conserve les quatre captures et leurs hotspots. La caméra affiche la vidéo locale en boucle ; ses contrôles simulent un aperçu, sans capturer le capteur du visiteur. Les appels aux contacts sont simulés. Safari ouvre le vrai lien album.link, sans MusicKit.
+Instagram conserve les quatre captures et leurs hotspots. L’app Appareil photo affiche la vidéo locale en boucle, sans utiliser le capteur du visiteur. FaceTime propose une preview frontale locale sur action explicite, sans transmission ni enregistrement. Les appels aux contacts sont simulés. Safari ouvre le vrai lien album.link, sans MusicKit.
 
 ## Validation
 
@@ -36,6 +36,7 @@ node --check app.js
 python3 tests/check_assets.py
 python3 tests/smoke.py
 python3 tests/release_candidate.py
+python3 tests/micro_fix.py
 ```
 
 Le serveur doit être démarré pour le smoke test. Celui-ci utilise Python Playwright et `/usr/bin/chromium`, disponibles dans l’environnement cloud. Ils ne sont pas des dépendances de l’application. Pour une autre URL locale, définir `KAIROS_TEST_URL`.
@@ -59,3 +60,13 @@ Les badges et états lus, les visites d’apps, le résultat de l’appel et les
 Le manifeste et les icônes Apple permettent l’ouverture standalone depuis l’écran d’accueil. Aucun service worker n’est ajouté : pas de promesse de fonctionnement hors ligne ni de cache pouvant conserver une ancienne version. L’installation et le rendu Safari sur iPhone physique restent à valider. Aucun nouveau système de verrouillage/reverrouillage n’a été construit ; les notifications du lockscreen existant reflètent les lectures et le dernier appel.
 
 `tests/release_candidate.py` vérifie les secrets séparément, la finale différée/unique et son état après rechargement, les badges, la file audio et l’artwork, le cas audio indisponible, l’appel anticipé à 26 secondes, les appels acceptés/refusés, les événements Calendrier, FaceTime, Réglages et les ressources PWA. Ces scénarios complètent la suite de gestes et d’apps existante.
+
+## Dernier micro-fix
+
+FaceTime garde son historique existant. « Nouveau FaceTime » et le bouton + demandent `getUserMedia({ video: { facingMode: 'user' }, audio: false })`, uniquement après un clic. La self-view utilise `srcObject`, `muted`, `autoplay` et `playsinline`. Un refus, une API absente ou une erreur matériel affiche « Caméra indisponible » avec une action Réessayer. Aucun micro n’est demandé. Tous les tracks sont arrêtés avant de quitter la preview (raccrochage, retour, gestes, Home, changement d’app, page masquée ou quittée). Une permission résolue après la sortie est ignorée et son flux est immédiatement fermé. Le retour depuis un onglet masqué nécessite une nouvelle action explicite pour réactiver la caméra.
+
+Un premier refus du numéro inconnu programme un rappel à +60 secondes. L’échéance, les refus, l’acceptation et le compteur sont stockés dans la progression de session existante. Le rappel est différé si une preview FaceTime ou un autre écran d’appel est actif. Il ne peut y avoir que deux tentatives au total ; une acceptation annule tout rappel restant. Récents regroupe les deux tentatives sur la même ligne.
+
+`transitionMedia` centralise les sorties de contexte et appelle `AudioManager.stop()` (pause, remise à zéro et synchronisation UI). Un fichier ABEG/Tout gâcher quitte son contexte au retour précédent, au Home et à l’ouverture d’un autre contenu. Musique/Spotify peuvent garder la lecture entre leurs propres écrans internes ; quitter l’app l’arrête. Un appel entrant arrête les autres médias avant son audio. Le mini-player, la file, le seek et les contrôles restent disponibles pour un redémarrage explicite.
+
+`tests/micro_fix.py` utilise une caméra virtuelle Chromium réelle pour les tracks et un navigateur avec permissions refusées pour le fallback. Il couvre aussi les permissions tardives, les sorties par gestes, le bouton +, les arrière-plans, les rappels acceptés/refusés, leur persistance après refresh, leur report pendant FaceTime et les sorties audio. Il complète les suites V7 existantes. La caméra frontale et les permissions sur iPhone/Safari physiques restent à valider sur la preview HTTPS.

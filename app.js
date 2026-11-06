@@ -52,6 +52,16 @@ const state = {
   visitedApps: new Set(savedProgress.visitedApps || []),
   callHistory: savedProgress.callHistory || null,
   callStatus: "idle",
+  unknownCallAttempts:
+    savedProgress.unknownCallAttempts ?? (savedProgress.callTriggered ? 1 : 0),
+  unknownFirstDeclined: !!savedProgress.unknownFirstDeclined,
+  unknownCallRecalled: !!savedProgress.unknownCallRecalled,
+  unknownCallAccepted:
+    !!savedProgress.unknownCallAccepted ||
+    savedProgress.callHistory?.outcome === "answered",
+  recallDueAt: savedProgress.recallDueAt || 0,
+  facetimeStream: null,
+  facetimeActive: false,
   abegUnlocked: session.get("kairos.abeg") === "1",
   toutGacherUnlocked: session.get("kairos.tout") === "1",
   attempts: { abeg: 0, tout: 0 },
@@ -62,8 +72,10 @@ const state = {
 };
 let callTimer = null,
   callStartedAt = 0,
-  callInterval = null;
+  callInterval = null,
+  recallTimer = null;
 function navigate(renderer, ...args) {
+  transitionMedia({ renderer, args });
   if (state.currentView) state.navigationStack.push(state.currentView);
   state.currentView = { renderer, args };
   renderer(...args);
@@ -337,6 +349,7 @@ function show(v) {
 function goHome() {
   if (state.callStatus !== "idle") return;
   if (!state.phoneUnlocked) return unlockPhone();
+  transitionMedia(null);
   state.navigationStack = [];
   state.currentView = null;
   state.currentApp = null;
@@ -362,6 +375,7 @@ function goBack() {
   if ($("#photoViewer.open")) return closePhoto();
   const previous = state.navigationStack.pop();
   if (previous) {
+    transitionMedia(previous);
     state.currentView = previous;
     previous.renderer(...previous.args);
   } else goHome();
@@ -487,7 +501,10 @@ function secretUnlocked(kind) {
   return state[kind === "abeg" ? "abegUnlocked" : "toutGacherUnlocked"];
 }
 function renderFileLock(kind) {
-  if (secretUnlocked(kind)) return renderAudio(kind);
+  if (secretUnlocked(kind)) {
+    state.currentView = { renderer: renderAudio, args: [kind] };
+    return renderAudio(kind);
+  }
   const title = kind === "abeg" ? "ABEG_MASTER.wav" : "tout_gacher.wav";
   openApp(
     `<div class="lock-file">${nav(title)}<div class="file-card">${icon("lock")}<h3>Fichier protégé</h3><p>${kind === "abeg" ? "Code à 4 chiffres" : "Mot de passe — 4 lettres"}</p><form class="code-input" data-secret="${kind}"><input id="codeField" type="password" inputmode="${kind === "abeg" ? "numeric" : "text"}" aria-label="${kind === "abeg" ? "Code à 4 chiffres" : "Mot de passe à 4 lettres"}" maxlength="4" autocomplete="off" required><button data-unlock="${kind}">Déverrouiller</button></form><p id="passwordFeedback" class="password-feedback" role="status"></p></div></div>`,
@@ -568,6 +585,7 @@ class AudioManager {
   constructor() {
     this.audio = new Audio();
     this.audio.preload = "metadata";
+    this.playGeneration = 0;
     this.state = {
       currentTrack: null,
       currentTime: 0,
@@ -626,7 +644,9 @@ class AudioManager {
     return true;
   }
   async play(track) {
-    if (state.callStatus !== "idle") return;
+    if (state.callStatus !== "idle" || !audioContextFor(state.currentView))
+      return;
+    const generation = ++this.playGeneration;
     if (track && !this.load(track)) return;
     if (!this.state.currentTrack) {
       const first = this.available()[0];
@@ -638,13 +658,18 @@ class AudioManager {
     }
     try {
       await this.audio.play();
+      if (generation !== this.playGeneration) return;
+      if (!audioContextFor(state.currentView) || state.callStatus !== "idle")
+        this.stop();
     } catch {
+      if (generation !== this.playGeneration) return;
       this.state.isPlaying = false;
       syncAudioUI();
       toast("Touchez Lecture pour démarrer le son");
     }
   }
   pause() {
+    ++this.playGeneration;
     this.audio.pause();
   }
   resume() {
@@ -654,8 +679,10 @@ class AudioManager {
     this.next(-1);
   }
   stop() {
+    ++this.playGeneration;
     this.audio.pause();
-    this.seek(0);
+    // Reset even if metadata has not arrived yet; do not let a pending play escape its view.
+    if (this.audio.getAttribute("src")) this.audio.currentTime = 0;
     this.state.currentTime = 0;
     this.state.isPlaying = false;
     syncAudioUI();
@@ -973,7 +1000,152 @@ function renderFaceTime() {
     ["Yoan", "assets/images/gallery-studio.jpg", 83],
   ];
   openApp(
-    `<div class="facetime-app">${nav("FaceTime", "＋")}<h1 class="section-title">FaceTime</h1><button class="facetime-new" data-contact-call>${icon("video")} Nouveau FaceTime</button><div class="list">${people.map((p) => `<button class="row" data-contact-call>${avatarHTML(p[1], p[0])}<span class="row-copy"><b>${p[0]}</b><span>${p[0] === "Corentin" ? "Appel vidéo manqué" : "Appel vidéo entrant"}</span></span><span class="row-meta">${timeHTML(p[2])} ${icon("video")}</span></button>`).join("")}</div></div>`,
+    `<div class="facetime-app">${nav("FaceTime", "＋").replace("data-options", "data-facetime-start")}<h1 class="section-title">FaceTime</h1><button class="facetime-new" data-facetime-start>${icon("video")} Nouveau FaceTime</button><div class="list">${people.map((p) => `<button class="row" data-contact-call>${avatarHTML(p[1], p[0])}<span class="row-copy"><b>${p[0]}</b><span>${p[0] === "Corentin" ? "Appel vidéo manqué" : "Appel vidéo entrant"}</span></span><span class="row-meta">${timeHTML(p[2])} ${icon("video")}</span></button>`).join("")}</div></div>`,
+  );
+}
+
+/* One media boundary for navigation: music may survive internal Music views only. */
+function audioContextFor(view, app = state.currentApp) {
+  if (!view) return null;
+  if (
+    (app === "music" || app === "spotify") &&
+    [renderMusic, renderSpotify, renderAudio].includes(view.renderer)
+  )
+    return app;
+  if (view.renderer === renderAudio) return `file:${view.args[0]}`;
+  return null;
+}
+function transitionMedia(nextView) {
+  if (
+    !nextView ||
+    audioContextFor(nextView) !== audioContextFor(state.currentView)
+  )
+    audioManager.stop();
+  if (nextView?.renderer !== renderFaceTimePreview) stopFaceTime();
+}
+let facetimeRequest = 0;
+function stopTracks(stream) {
+  for (const track of stream?.getTracks() || []) {
+    try {
+      track.stop();
+    } catch {
+      /* Stop remaining tracks even if one device has already disappeared. */
+    }
+  }
+}
+function stopFaceTime() {
+  ++facetimeRequest;
+  stopTracks(state.facetimeStream);
+  state.facetimeStream = null;
+  state.facetimeActive = false;
+  const video = $("#facetimeCamera");
+  if (video) {
+    video.pause();
+    video.srcObject = null;
+  }
+}
+function faceTimeStatus(message) {
+  const status = $("#facetimeStatus");
+  if (status) status.textContent = message;
+  $("#facetimeFallback")?.classList.remove("hidden");
+  $("[data-facetime-retry]")?.classList.remove("hidden");
+  $("#facetimeCamera")?.classList.add("hidden");
+}
+function renderFaceTimePreview() {
+  openApp(
+    `<div class="facetime-preview"><video id="facetimeCamera" class="hidden" autoplay playsinline muted></video><div class="facetime-preview-title"><small>FaceTime</small><h2>Nouvel appel</h2></div><div id="facetimeFallback" class="facetime-fallback">${icon("video")}<p id="facetimeStatus" role="status">Connexion à la caméra…</p><button class="hidden" data-facetime-retry>Réessayer</button></div><div class="facetime-preview-controls">${iconButton("camera", "Désactiver la caméra", 'data-facetime-camera aria-pressed="false"')}<button class="hangup" data-facetime-end aria-label="Fermer l’appel FaceTime">${icon("phone")}</button></div></div>`,
+    { dark: true },
+  );
+}
+function openFaceTimePreview() {
+  navigate(renderFaceTimePreview);
+  startFaceTimeCamera();
+}
+async function startFaceTimeCamera() {
+  if (
+    state.currentView?.renderer !== renderFaceTimePreview ||
+    state.callStatus !== "idle" ||
+    document.hidden
+  )
+    return;
+  stopFaceTime();
+  const request = ++facetimeRequest;
+  state.facetimeActive = true;
+  const video = $("#facetimeCamera");
+  $("#facetimeStatus").textContent = "Connexion à la caméra…";
+  $("[data-facetime-retry]").classList.add("hidden");
+  try {
+    if (!navigator.mediaDevices?.getUserMedia)
+      throw new Error("Camera unavailable");
+    const stream = await navigator.mediaDevices.getUserMedia({
+      video: { facingMode: "user" },
+      audio: false,
+    });
+    // Permission can resolve after Home/back, a new request, a hidden tab, or another call.
+    if (
+      request !== facetimeRequest ||
+      state.currentView?.renderer !== renderFaceTimePreview ||
+      document.hidden ||
+      state.callStatus !== "idle"
+    ) {
+      stopTracks(stream);
+      return;
+    }
+    state.facetimeStream = stream;
+    video.srcObject = stream;
+    video.muted = true;
+    await video.play();
+    if (request !== facetimeRequest) return;
+    video.classList.remove("hidden");
+    $("#facetimeFallback").classList.add("hidden");
+    for (const track of stream.getTracks())
+      track.addEventListener(
+        "ended",
+        () => {
+          if (request === facetimeRequest) {
+            stopFaceTime();
+            faceTimeStatus("Caméra indisponible");
+          }
+        },
+        { once: true },
+      );
+  } catch {
+    if (request !== facetimeRequest) return;
+    stopFaceTime();
+    faceTimeStatus("Caméra indisponible");
+  }
+}
+// No stream is kept in a background tab or a page retained by browser history.
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) audioManager.stop();
+  if (document.hidden && state.facetimeActive) {
+    stopFaceTime();
+    faceTimeStatus("Caméra en pause");
+  }
+});
+window.addEventListener("pagehide", () => {
+  stopFaceTime();
+  audioManager.stop();
+  if (state.callStatus !== "idle") endCall();
+});
+
+/* One deterministic recall, persisted with the existing session progression. */
+function recallEligible() {
+  return (
+    state.unknownFirstDeclined &&
+    state.unknownCallAttempts === 1 &&
+    !state.unknownCallRecalled &&
+    !state.unknownCallAccepted &&
+    state.recallDueAt > 0
+  );
+}
+function scheduleUnknownRecall() {
+  clearTimeout(recallTimer);
+  recallTimer = null;
+  if (!recallEligible()) return;
+  recallTimer = setTimeout(
+    () => triggerIncomingCall(true),
+    Math.max(0, state.recallDueAt - Date.now()),
   );
 }
 
@@ -983,7 +1155,7 @@ function renderPhone(tab = "Récents") {
   const rows = contacts
     .map(
       (name, i) =>
-        `<button class="row" data-call-info="${name}">${avatarHTML("", name)}<span class="row-copy"><b class="${i === 2 && state.callHistory?.outcome !== "answered" ? "missed" : ""}">${name}</b><span>${i === 2 ? (state.callHistory?.outcome === "answered" ? "Appel entrant" : "Appel manqué") : "mobile"}</span></span><span class="row-meta">${i === 2 && state.callHistory ? `<time>${new Date(state.callHistory.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</time>` : timeHTML([12, 31, 46, 180][i])} ${icon("info")}</span></button>`,
+        `<button class="row" data-call-info="${name}">${avatarHTML("", name)}<span class="row-copy"><b class="${i === 2 && state.callHistory?.outcome !== "answered" ? "missed" : ""}">${name}</b><span>${i === 2 ? (state.callHistory?.outcome === "answered" ? "Appel entrant" : "Appel manqué") + (state.unknownCallAttempts > 1 ? " (2)" : "") : "mobile"}</span></span><span class="row-meta">${i === 2 && state.callHistory ? `<time>${new Date(state.callHistory.at).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</time>` : timeHTML([12, 31, 46, 180][i])} ${icon("info")}</span></button>`,
     )
     .join("");
   const dial = `<div class="dialpad"><output id="dialNumber" aria-live="polite"></output><div class="dial-grid">${"123456789*0#"
@@ -1017,6 +1189,7 @@ function renderPhone(tab = "Récents") {
   );
 }
 function scheduleIncomingCall() {
+  scheduleUnknownRecall();
   if (
     state.callHandled ||
     state.callStatus !== "idle" ||
@@ -1034,15 +1207,35 @@ function setModalInert() {
   phoneScene.querySelectorAll(".view").forEach((v) => (v.inert = true));
   $("#homeIndicator").inert = true;
 }
-function triggerIncomingCall() {
-  if (state.callHandled || state.callStatus !== "idle") return;
-  if (!modal.classList.contains("hidden")) {
-    callTimer = setTimeout(triggerIncomingCall, 5000);
+function triggerIncomingCall(isRecall = false) {
+  if (state.callStatus !== "idle") return;
+  if (
+    isRecall
+      ? !recallEligible()
+      : state.callHandled || state.unknownCallAttempts > 0
+  )
+    return;
+  if (!modal.classList.contains("hidden") || state.facetimeActive) {
+    if (isRecall)
+      recallTimer = setTimeout(() => triggerIncomingCall(true), 2000);
+    else callTimer = setTimeout(triggerIncomingCall, 2000);
     return;
   }
-  audioManager.pause();
+  audioManager.stop();
+  stopFaceTime();
+  state.unknownCallAttempts += 1;
+  if (isRecall) {
+    state.unknownCallRecalled = true;
+    state.recallDueAt = 0;
+    clearTimeout(recallTimer);
+    recallTimer = null;
+  }
   state.callTriggered = true;
-  state.callHistory = { outcome: "missed", at: Date.now() };
+  state.callHistory = {
+    outcome: "missed",
+    at: Date.now(),
+    attempts: state.unknownCallAttempts,
+  };
   persistProgress();
   hideFinalNotification();
   systemSounds.play("incomingCall");
@@ -1066,9 +1259,15 @@ function markCallHandled() {
   callTimer = null;
 }
 function acceptCall() {
+  state.unknownCallAccepted = true;
+  state.recallDueAt = 0;
+  clearTimeout(recallTimer);
+  recallTimer = null;
+  audioManager.stop();
   state.callHistory = {
     outcome: "answered",
     at: state.callHistory?.at || Date.now(),
+    attempts: state.unknownCallAttempts,
   };
   persistProgress();
   trackEvent("incoming_call_answered");
@@ -1092,7 +1291,10 @@ function acceptCall() {
       "",
     )}</div><button class="hangup" data-call-hangup aria-label="Raccrocher">${icon("phone")}</button><audio id="callAudio" src="${AUDIO.call}" preload="metadata"></audio></div>`;
   const a = $("#callAudio");
-  a.play().catch(() => toast("Touchez le haut-parleur pour lancer le son"));
+  a.play().catch(() => {
+    if (state.callStatus === "active" && $("#callAudio") === a)
+      toast("Touchez le haut-parleur pour lancer le son");
+  });
   a.onended = endCall;
   a.onerror = () => {
     toast("Audio de l’appel indisponible");
@@ -1121,12 +1323,18 @@ function endCall() {
   refreshAfterCall();
 }
 function declineCall() {
+  if (state.unknownCallAttempts === 1 && !state.unknownCallAccepted) {
+    state.unknownFirstDeclined = true;
+    state.recallDueAt = Date.now() + 60000;
+  } else state.recallDueAt = 0;
+  persistProgress();
   trackEvent("incoming_call_declined");
   systemSounds.stop();
   markCallHandled();
   state.callStatus = "idle";
   closeModal();
   toast("Appel refusé");
+  scheduleUnknownRecall();
   refreshAfterCall();
 }
 
@@ -1307,6 +1515,15 @@ function bindDynamic() {
         : "Composez un numéro",
     ),
   );
+  on("[data-facetime-start]", openFaceTimePreview);
+  on("[data-facetime-retry]", startFaceTimeCamera);
+  on("[data-facetime-end]", goBack);
+  on("[data-facetime-camera]", (button) => {
+    const track = state.facetimeStream?.getVideoTracks()[0];
+    if (!track) return;
+    track.enabled = !track.enabled;
+    button.setAttribute("aria-pressed", String(!track.enabled));
+  });
   on("[data-contact-call]", () =>
     showSheet("Correspondant indisponible", "Aucune réponse pour le moment."),
   );
@@ -1595,6 +1812,11 @@ function persistProgress() {
       notesOpened: state.notesOpened,
       callTriggered: state.callTriggered,
       callHistory: state.callHistory,
+      unknownCallAttempts: state.unknownCallAttempts,
+      unknownFirstDeclined: state.unknownFirstDeclined,
+      unknownCallRecalled: state.unknownCallRecalled,
+      unknownCallAccepted: state.unknownCallAccepted,
+      recallDueAt: state.recallDueAt,
       finalSequenceTriggered: state.finalSequenceTriggered,
       finalNoteOpened: state.finalNoteOpened,
       firstUnlockedAt: state.firstUnlockedAt,
@@ -1733,6 +1955,7 @@ function route(name) {
     scheduleIncomingCall();
   }
   if (name === "safari") {
+    transitionMedia(null);
     trackEvent("album_link_clicked");
     window.open(ALBUM_URL, "_blank", "noopener");
     return;
@@ -1753,6 +1976,7 @@ function route(name) {
     phone: renderPhone,
   };
   if (!routes[name]) return;
+  transitionMedia(null);
   state.navigationStack = [];
   state.currentView = null;
   state.currentApp = name;
