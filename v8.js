@@ -92,6 +92,7 @@ function igSwitch(view) {
   state.currentView = { renderer: renderInstagram, args: [view] };
   renderInstagram(view);
 }
+const MANII_GRID_POST_ORDER = [5, 4, 3, 2, 1, 0];
 function renderInstagram(view = "manii-profile") {
   if (view === "inbox") return renderInstagramInbox();
   if (view === "home") return renderIGFeed();
@@ -116,10 +117,10 @@ function renderInstagram(view = "manii-profile") {
   scroll.append(frame);
   if (view === "manii-profile") {
     frame.classList.add("ig-manii-top");
-    // Original images share a 120px overlap. Grid coordinates are in the supplied capture.
+    // Complete capture: one 3 x 2 overlay maps newest to oldest explicitly.
     scroll.insertAdjacentHTML(
       "beforeend",
-      `<div class="ig-feed-window"><img src="assets/images/insta-manii-feed-current.webp" width="944" height="1125" alt="Highlights et grille réelle du profil Manii">${MANII_REAL_INSTAGRAM_CONTENT.map((url, i) => `<button class="ig-grid-hit" data-ig-post-index="${i}" aria-label="Ouvrir ${i < 2 ? "la publication" : "le Reel"} ${i + 1}" style="left:${((i % 3) * 100) / 3}%;width:${100 / 3}%;top:${((i < 3 ? 390 : 811) / 1005) * 100}%;height:${((i < 3 ? 421 : 194) / 1005) * 100}%"></button>`).join("")}</div>`,
+      `<div class="ig-feed-window"><img src="assets/images/insta-manii-feed-current-v2.webp" width="944" height="1200" alt="Highlights et grille réelle du profil Manii"><div class="ig-feed-grid-hotspots">${MANII_GRID_POST_ORDER.map((postIndex, cellIndex) => `<button class="ig-grid-hit" data-ig-post-index="${postIndex}" data-ig-grid-cell="${cellIndex}" aria-label="Ouvrir ${postIndex < 2 ? "la publication" : "le Reel"} ${cellIndex + 1}"></button>`).join("")}</div></div>`,
     );
     capture.insertAdjacentHTML(
       "beforeend",

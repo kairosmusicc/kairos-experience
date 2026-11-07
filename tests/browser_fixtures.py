@@ -33,7 +33,7 @@ def rich_metadata(ctx, pending=None):
     songs=[results[0]]+[dict(wrapperType='track',kind='song',collectionId=6822465566,trackId=i+1,trackName=t,previewUrl=f'https://audio-ssl.itunes.apple.com/isolated-test-fixture/kairos-{i}.m4a',trackTimeMillis=180000) for i,t in enumerate(TITLES)]
     def lookup(route):
         seen.append(route.request.url)
-        body={'results':songs if 'limit=1' not in route.request.url else results,'resultCount':len(songs if 'limit=1' not in route.request.url else results)}
+        body={'results':songs if 'id=6822465566,' not in route.request.url else results,'resultCount':len(songs if 'id=6822465566,' not in route.request.url else results)}
         if pending is not None:pending.append((route,body))
         else:route.fulfill(status=200,content_type='application/json',headers={'Access-Control-Allow-Origin':'*'},body=json.dumps(body))
     ctx.route('https://itunes.apple.com/**',lookup)

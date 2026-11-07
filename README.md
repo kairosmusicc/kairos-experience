@@ -173,3 +173,23 @@ python3 tests/check_assets.py
 Les tests V8.3 couvrent trois profils de navigateur mobile émulés, petit viewport, rotation, safe areas et réduction du Visual Viewport. Ils vérifient le cadrage des quatre bords, les gestes après scale, les six taps, le retour au scroll, le préchauffage avant Musique, les boutons désactivés, le priming sans autoplay, l’appel synchrone à audio.play dans l’activation utilisateur, TU SAIS, les albums externes locaux, les iframes explicites et le cache. Artworks, métadonnées, previews et embeds des fournisseurs sont **des fixtures isolées** ; les captures `/tmp/kairos-v83` qui les contiennent ne représentent pas une validation live des catalogues. Les tests d’appel utilisent toujours le vrai `Nouvel-enregistrement-215.wav`.
 
 Les suites historiques sont adaptées uniquement aux exigences remplacées (coque mobile complète, grille directe, vue locale avant iframe, titres indisponibles désactivés). Les fournisseurs réels restent limités par le réseau de l’environnement ; la disponibilité des médias Apple et les embeds Instagram, ainsi que Safari/iPhone physique, doivent encore être validés humainement sur la preview. Aucun merge dans main, déploiement Production ou Analytics n’est ajouté.
+
+## V8.3.1 — Regression fix (baseline frozen)
+
+Snapshot publié : `v8.3-before-regression-fix` → `541f11d0f81173babff5d8a7fbc43b164d06dced`. Le commit distant suivant apporte uniquement l’asset V2 autorisé. Aucun changement à `styles.css`, `index.html`, au device fit, aux contenus des DMs, à Spotify, à Safari ni aux appels.
+
+Corrections limitées : Safari ne fournit généralement pas Battery API ; le contour vide est remplacé par un glyphe décoratif rempli à 65 %, sans nombre ni prétention de mesure. La grille Manii utilise l’image V2 entière, sans crop, et une seule overlay CSS grid 3×2. L’ordre visuel est explicitement `[5,4,3,2,1,0]`, contrairement à l’ancien ordre chronologique des URLs. Les tracklists tiers étaient absentes du rendu et limitées à un seul résultat par le lookup ; le lookup demande désormais jusqu’à 200 songs pour les IDs existants, stocke chaque titre (même sans preview), et migre le cache tronqué v1 vers v2. `playKairos()` reste identique au snapshot, sans await.
+
+Le swipe lock utilisait −55 pixels corrigés par le scale et une dominance verticale de 1,3. Il utilise désormais les pixels physiques : distance verticale >32 px avec dominance >0,8, ou flick >18 px en moins de 350 ms avec dominance >0,7. Capture immédiate au pointerdown : écran pour la surface, bouton lui-même pour conserver les taps lampe/caméra/accessibilité. Les gestes hors lockscreen et pointercancel restent inchangés. Aucun feedback animé supplémentaire.
+
+```sh
+python3 tests/v831_golden.py before  # avant toute modification (déjà enregistré)
+python3 tests/v831_lock_swipe.py
+python3 tests/v831_instagram_grid.py
+python3 tests/v831_apple_tracklists.py
+python3 tests/v831_golden.py after
+```
+
+Les 22 captures des 11 écrans frozen, mobile et desktop, sont comparées sans masque dans `/tmp/kairos-v831-golden`. Une batterie connue simulée identique isole la modification intentionnelle du glyphe unknown ; la batterie unknown est testée séparément. Tolérance limitée aux arrondis du compositeur : delta de canal ≤24 et ≤0,005 % des pixels avec delta >8. Aucune différence visuelle significative. Les trois suites ciblées couvrent les quatre scales, le cancel, les boutons, les six cellules, les tracks sans aperçu, la lecture synchrone et le cache valide sans nouveau lookup.
+
+Les métadonnées Apple des tests sont des fixtures explicites (3 titres pour chacun des trois albums, Kany 1, KAIROS 8), pas des titres officiels récupérés. La requête iTunes réelle reçoit encore HTTP 403 : aucun compte officiel de titres n’est attestable depuis cet environnement. La disponibilité live, le nombre réel de titres et Safari sur iPhone physique restent à valider sur la preview. Aucune donnée officielle n’est inventée et aucun merge/Production n’est lancé.

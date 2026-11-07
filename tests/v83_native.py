@@ -93,7 +93,7 @@ with sync_playwright() as pw:
    p.click('[data-app-back]')
   home(p);app(p,'instagram')
   assert p.locator('.ig-manii-top .full-shot').get_attribute('src').endswith('insta-manii-profile.webp')
-  assert p.locator('.ig-feed-window > img').get_attribute('src').endswith('insta-manii-feed-current.webp')
+  assert p.locator('.ig-feed-window > img').get_attribute('src').endswith('insta-manii-feed-current-v2.webp')
   assert p.locator('[data-ig-publications],.ig-profile-official').count()==0
   assert p.locator('[data-ig-post-index]').count()==6
   assert p.locator('iframe').count()==0 and not any('instagram.com/embed.js' in u for u in requests)

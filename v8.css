@@ -1396,6 +1396,17 @@
 .battery-unknown {
   min-width: 25px;
 }
+/* Decorative fallback only: no Battery API means no physical battery measurement. */
+.battery-unknown::before {
+  content: "";
+  position: absolute;
+  left: 2px;
+  top: 2px;
+  bottom: 2px;
+  width: 65%;
+  border-radius: 2px;
+  background: currentColor;
+}
 .battery-unknown span:empty {
   display: none;
 }
@@ -1807,17 +1818,24 @@
 }
 .ig-feed-window {
   position: relative;
-  aspect-ratio: 944 / 1005;
-  overflow: hidden;
+  width: 100%;
+  height: auto;
 }
 .ig-feed-window > img {
   display: block;
   width: 100%;
   height: auto;
-  margin-top: -12.7118644%;
+  object-fit: contain;
+}
+/* One rectangle measured from the complete 944 x 1200 capture: grid begins at y=370. */
+.ig-feed-grid-hotspots {
+  position: absolute;
+  inset: 30.8333333% 0 0;
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(2, 1fr);
 }
 .ig-grid-hit {
-  position: absolute;
   border: 0;
   background: transparent;
   border-radius: 0;
@@ -1866,3 +1884,5 @@
 .apple-local-album .mini-player {
   bottom: calc(var(--bottom-space) + 12px);
 }
+
+.lock-view, .lock-view * { overscroll-behavior: none; }

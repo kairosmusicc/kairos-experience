@@ -2208,6 +2208,7 @@ screen.addEventListener("pointerdown", (e) => {
   gesture = {
     id: e.pointerId,
     ratio,
+    startTime: performance.now(),
     x: e.clientX,
     y: e.clientY,
     edge: x < 28,
@@ -2215,13 +2216,13 @@ screen.addEventListener("pointerdown", (e) => {
     lock: lock.classList.contains("active-view"),
     photo: !!$("#photoViewer.open"),
   };
+  if (gesture.lock) (e.target.closest("button") || screen).setPointerCapture(e.pointerId);
 });
 screen.addEventListener("pointermove", (e) => {
-  if (!gesture || gesture.id !== e.pointerId) return;
+  if (!gesture || gesture.id !== e.pointerId || gesture.lock) return;
   const dx = (e.clientX - gesture.x) * gesture.ratio,
     dy = (e.clientY - gesture.y) * gesture.ratio;
   if (
-    (gesture.lock && Math.abs(dy) > 12) ||
     (gesture.home && Math.abs(dy) > 12) ||
     (gesture.edge && dx > 12 && dx > Math.abs(dy) * 1.6)
   )
@@ -2234,9 +2235,14 @@ screen.addEventListener("pointerup", (e) => {
   const dx = (e.clientX - g.x) * g.ratio,
     dy = (e.clientY - g.y) * g.ratio;
   let handled = false;
-  if (g.lock && dy < -55 && Math.abs(dy) > Math.abs(dx) * 1.3) {
-    unlockPhone();
-    handled = true;
+  if (g.lock) {
+    const rawDy = e.clientY - g.y, rawDx = e.clientX - g.x,
+      duration = performance.now() - g.startTime;
+    if ((rawDy < -32 && Math.abs(rawDy) > Math.abs(rawDx) * .8) ||
+        (rawDy < -18 && duration < 350 && Math.abs(rawDy) > Math.abs(rawDx) * .7)) {
+      unlockPhone();
+      handled = true;
+    }
   } else if (g.home && dy < -45 && Math.abs(dy) > Math.abs(dx) * 1.3) {
     goHome();
     handled = true;
