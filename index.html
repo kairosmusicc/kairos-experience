@@ -14,6 +14,7 @@
     />
     <title>Les archives de KAIROS</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="v8.css" />
     <link rel="icon" href="assets/icons/music.png" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/pwa/kairos-192.png" />
@@ -21,24 +22,7 @@
   </head>
   <body>
     <main class="experience">
-      <section id="intro" class="intro active">
-        <div class="intro-card">
-          <img
-            src="assets/images/logo.png"
-            alt="Manii & Paapii"
-            class="intro-logo"
-          />
-          <p class="eyebrow">ARCHIVES // KAIROS</p>
-          <h1>Le téléphone<br />de KAIROS</h1>
-          <p>
-            Un téléphone. Quelques traces. Deux fichiers qui n’auraient
-            peut-être pas dû rester là.
-          </p>
-          <button id="enterBtn" class="primary">Allumer le téléphone</button>
-        </div>
-      </section>
-
-      <section id="phoneScene" class="phone-scene">
+      <section id="phoneScene" class="phone-scene active">
         <div id="device" class="device">
           <div class="screen">
             <div id="statusBar" class="status-bar light-status">
@@ -201,6 +185,8 @@
         </div>
       </section>
     </main>
-    <script src="app.js"></script>
+    <script src="instagram-data.js" defer></script>
+    <script src="v8.js" defer></script>
+    <script src="app.js" defer></script>
   </body>
 </html>

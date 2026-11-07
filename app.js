@@ -1,7 +1,6 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const intro = $("#intro"),
-  phoneScene = $("#phoneScene"),
+const phoneScene = $("#phoneScene"),
   lock = $("#lock"),
   home = $("#home"),
   appView = $("#appView"),
@@ -69,6 +68,23 @@ const state = {
   read: new Set(savedProgress.read || []),
   photoIndex: 0,
   musicState: null,
+  instagramEpoch: savedProgress.instagramEpoch || Date.now(),
+  instagramEmmanuellaRead: !!savedProgress.instagramEmmanuellaRead,
+  instagramAngisteOpened: !!savedProgress.instagramAngisteOpened,
+  instagramCorentinOpened: !!savedProgress.instagramCorentinOpened,
+  instagramRedkaOpened: !!savedProgress.instagramRedkaOpened,
+  finalAlbumMessageAvailable: !!savedProgress.finalAlbumMessageAvailable,
+  finalAlbumMessageRead: !!savedProgress.finalAlbumMessageRead,
+  finalAlbumMessageAt: savedProgress.finalAlbumMessageAt || 0,
+  safariKairosAvailable: !!savedProgress.safariKairosAvailable,
+  albumLinkClicked: !!savedProgress.albumLinkClicked,
+  instagramReplies: savedProgress.instagramReplies || {},
+  instagramReactions: savedProgress.instagramReactions || {},
+  safariHistory: Array.isArray(savedProgress.safariHistory)
+    ? savedProgress.safariHistory
+        .filter((x) => ["start", "album"].includes(x))
+        .slice(-20)
+    : ["start"],
 };
 let callTimer = null,
   callStartedAt = 0,
@@ -81,6 +97,7 @@ function navigate(renderer, ...args) {
   renderer(...args);
 }
 function unlockPhone() {
+  systemSounds.enable();
   if (!state.phoneUnlocked) trackEvent("phone_unlocked");
   state.phoneUnlocked = true;
   if (!state.firstUnlockedAt) state.firstUnlockedAt = Date.now();
@@ -291,6 +308,19 @@ if (navigator.getBattery) {
 
 function icon(name) {
   const paths = {
+    igHome: '<path d="m3 10 9-7 9 7v11h-6v-7H9v7H3z"/>',
+    reels:
+      '<rect x="3" y="4" width="18" height="17" rx="4"/><path d="M3 9h18M8 4l3 5m3-5 3 5m-7 4 5 3-5 3z"/>',
+    message: '<path d="m22 2-7 20-4-9-9-4zM22 2 11 13"/>',
+    heart:
+      '<path d="M20 4c-3-2-6 0-8 2-2-2-5-4-8-2-5 4 0 10 8 16 8-6 13-12 8-16z"/>',
+    grid: '<path d="M3 3h18v18H3zM9 3v18M15 3v18M3 9h18M3 15h18"/>',
+    sliders:
+      '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" fill="white"/><circle cx="16" cy="12" r="2" fill="white"/><circle cx="10" cy="18" r="2" fill="white"/>',
+    reload: '<path d="M20 10a8 8 0 1 0-1 8M20 4v6h-6"/>',
+    tabs: '<rect x="7" y="3" width="14" height="14" rx="3"/><path d="M17 17v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h3"/>',
+    globe:
+      '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-6 6-6 12 0 18 6-6 6-12 0-18z"/>',
     music:
       '<path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/>',
     pause: '<path d="M9 5v14M15 5v14"/>',
@@ -359,6 +389,7 @@ function goHome() {
   appView.scrollTop = 0;
   updatePhoneSignals();
   scheduleFinalNote();
+  scheduleAlbumMessage();
 }
 function openApp(html, { dark = false } = {}) {
   setStatus(dark);
@@ -369,6 +400,7 @@ function openApp(html, { dark = false } = {}) {
   bindDynamic();
   enhanceControls();
   syncAudioUI();
+  bindV8Controls();
 }
 function goBack() {
   if (state.callStatus !== "idle") return;
@@ -779,7 +811,7 @@ function renderMusic(view = "library") {
   const library = `<div class="list-toolbar"><span>Bibliothèque</span>${iconButton("ellipsis", "Options", "data-options")}</div><h1 class="section-title">Bibliothèque</h1><div class="library-categories"><button data-music-album>${icon("contacts")} Artistes ${icon("back")}</button><button data-music-album>${icon("file")} Albums ${icon("back")}</button><button data-music-album>${icon("music")} Morceaux ${icon("back")}</button></div><h2 class="subheading">Ajouts récents</h2><button class="album-tile" data-music-album><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><b>KAIROS</b><span>Manii & Paapii</span></button>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : '<p class="muted library-hint">Quelques fichiers sont restés dans les archives.</p>'}`;
   const album = `${nav("Bibliothèque", "•••")}<div class="album-header"><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii</p><small>ALBUM · 8 MORCEAUX</small></div><div class="album-actions"><button data-album-play>${icon("play")} Lecture</button><button data-shuffle>${icon("shuffle")} Aléatoire</button></div><div>${musicTrackRows(ALBUM_TRACKS)}</div><p class="muted album-notice">Les morceaux de l’album ne sont pas encore stockés sur cet iPhone.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}`;
   openApp(
-    `<div class="music-app">${view === "album" ? album : library}${miniPlayer()}<div class="music-tabs"><button class="active" data-music-library>${icon("file")}<span>Bibliothèque</span></button><button data-music-album>${icon("music")}<span>KAIROS</span></button><button data-music-search>${icon("search")}<span>Rechercher</span></button></div></div>`,
+    `<div class="music-app">${view === "album" ? album : library}${officialAlbumEntry("apple")}${miniPlayer()}<div class="music-tabs"><button class="active" data-music-library>${icon("file")}<span>Bibliothèque</span></button><button data-music-album>${icon("music")}<span>KAIROS</span></button><button data-music-search>${icon("search")}<span>Rechercher</span></button></div></div>`,
   );
 }
 
@@ -947,7 +979,7 @@ function renderSettingDetail(label) {
 function renderSpotify() {
   const available = audioManager.available();
   openApp(
-    `<div class="spotify-app">${nav("KAIROS", "•••")}<div class="spotify-hero"><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii · Album</p></div><div class="spot-actions">${iconButton("shuffle", "Lecture aléatoire", "data-shuffle")}<button class="spot-play" data-album-play aria-label="Lire l’album">${icon("play")}</button></div>${musicTrackRows(ALBUM_TRACKS)}<p class="album-notice muted">Les titres de l’album ne sont pas encore disponibles sur ce téléphone.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}${miniPlayer()}</div>`,
+    `<div class="spotify-app">${nav("KAIROS", "•••")}<div class="spotify-hero"><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii · Album</p></div><div class="spot-actions">${iconButton("shuffle", "Lecture aléatoire", "data-shuffle")}<button class="spot-play" data-album-play aria-label="Lire l’album">${icon("play")}</button></div>${musicTrackRows(ALBUM_TRACKS)}<p class="album-notice muted">Les titres de l’album ne sont pas encore disponibles sur ce téléphone.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}${officialAlbumEntry("spotify")}${miniPlayer()}</div>`,
     { dark: true },
   );
 }
@@ -1022,6 +1054,7 @@ function transitionMedia(nextView) {
   )
     audioManager.stop();
   if (nextView?.renderer !== renderFaceTimePreview) stopFaceTime();
+  if (nextView?.renderer !== renderOfficialEmbed) stopOfficialEmbeds();
 }
 let facetimeRequest = 0;
 function stopTracks(stream) {
@@ -1223,6 +1256,7 @@ function triggerIncomingCall(isRecall = false) {
   }
   audioManager.stop();
   stopFaceTime();
+  stopOfficialEmbeds();
   state.unknownCallAttempts += 1;
   if (isRecall) {
     state.unknownCallRecalled = true;
@@ -1351,7 +1385,7 @@ function screenshotApp(src, hotspots = [], dark = false) {
     { dark },
   );
 }
-function renderInstagram(state = "manii-profile") {
+function renderInstagramProfile(profile = "manii-profile") {
   const map = {
     "manii-profile": [
       "assets/images/insta-manii-profile.webp",
@@ -1423,7 +1457,7 @@ function renderInstagram(state = "manii-profile") {
       ],
     ],
   };
-  const [src, hs] = map[state];
+  const [src, hs] = map[profile];
   screenshotApp(src, hs, false);
 }
 /* Bind only the freshly rendered view; persistent AudioManager listeners are installed once. */
@@ -1794,10 +1828,42 @@ const JOURNEY_EVENTS = new Set([
   "incoming_call_declined",
   "final_note_opened",
   "album_link_clicked",
+  "instagram_opened",
+  "instagram_dm_opened",
+  "emmanuella_opened",
+  "angiste_opened",
+  "corentin_opened",
+  "redka_opened",
+  "final_album_message_shown",
+  "safari_kairos_opened",
+  "spotify_embed_started",
+  "apple_music_embed_opened",
 ]);
 function trackEvent(name, data = {}) {
   if (!JOURNEY_EVENTS.has(name)) return;
-  const safe = name === "app_opened" ? { app: data.app } : {};
+  const apps = [
+    "messages",
+    "whatsapp",
+    "notes",
+    "files",
+    "music",
+    "spotify",
+    "instagram",
+    "safari",
+    "photos",
+    "camera",
+    "phone",
+    "facetime",
+    "settings",
+    "calendar",
+  ];
+  const safe =
+    name === "app_opened" && apps.includes(data.app)
+      ? { app: data.app }
+      : name === "instagram_dm_opened" &&
+          ["emmanuella", "angiste", "corentin", "redka"].includes(data.thread)
+        ? { thread: data.thread }
+        : {};
   window.dispatchEvent(
     new CustomEvent("kairos:event", { detail: { name, ...safe } }),
   );
@@ -1822,6 +1888,19 @@ function persistProgress() {
       firstUnlockedAt: state.firstUnlockedAt,
       visitedApps: [...state.visitedApps],
       read: [...state.read],
+      instagramEpoch: state.instagramEpoch,
+      instagramEmmanuellaRead: state.instagramEmmanuellaRead,
+      instagramAngisteOpened: state.instagramAngisteOpened,
+      instagramCorentinOpened: state.instagramCorentinOpened,
+      instagramRedkaOpened: state.instagramRedkaOpened,
+      finalAlbumMessageAvailable: state.finalAlbumMessageAvailable,
+      finalAlbumMessageRead: state.finalAlbumMessageRead,
+      finalAlbumMessageAt: state.finalAlbumMessageAt,
+      safariKairosAvailable: state.safariKairosAvailable,
+      albumLinkClicked: state.albumLinkClicked,
+      instagramReplies: state.instagramReplies,
+      instagramReactions: state.instagramReactions,
+      safariHistory: state.safariHistory,
     }),
   );
 }
@@ -1887,6 +1966,7 @@ function updatePhoneSignals() {
     if (badge) badge.classList.toggle("hidden", !unread);
     $(`#lock [data-route="${app}"]`)?.classList.toggle("hidden", !unread);
   }
+  updateInstagramBadge();
   const old = $("#lockCallNotification");
   if (state.callHistory) {
     const notification = old || document.createElement("button");
@@ -1899,7 +1979,7 @@ function updatePhoneSignals() {
 }
 let finalTimer = null;
 function hideFinalNotification() {
-  $("#storyNotification").classList.add("hidden");
+  notifications.hide();
 }
 function scheduleFinalNote() {
   clearTimeout(finalTimer);
@@ -1917,31 +1997,40 @@ function scheduleFinalNote() {
       document.hidden
     )
       return;
+    if (
+      !notifications.show({
+        key: "final-note",
+        app: "Notes",
+        image: "assets/icons/notes.png",
+        sender: "02:43",
+        preview: "Il reste une dernière chose.",
+        duration: 16000,
+        open: () => {
+          route("notes");
+          navigate(renderNote, FINAL_NOTE.id);
+        },
+      })
+    )
+      return;
     state.finalSequenceTriggered = true;
     persistProgress();
-    const banner = $("#storyNotification");
-    banner.innerHTML = `<button class="story-open" aria-label="Notes, 02:43, Il reste une dernière chose"><img src="assets/icons/notes.png" alt=""><span><small>NOTES <time>maintenant</time></small><b>02:43</b><span>Il reste une dernière chose.</span></span></button><button class="story-dismiss" aria-label="Fermer la notification">${icon("close")}</button>`;
-    banner.classList.remove("hidden");
-    systemSounds.play("notification");
-    briefFeedback("notification");
-    $(".story-open", banner).onclick = () => {
-      hideFinalNotification();
-      route("notes");
-      navigate(renderNote, FINAL_NOTE.id);
-    };
-    $(".story-dismiss", banner).onclick = hideFinalNotification;
   }, 1600);
 }
 function refreshAfterCall() {
   updatePhoneSignals();
   if (state.currentView?.renderer === renderPhone)
     renderPhone(...state.currentView.args);
-  if (home.classList.contains("active-view")) scheduleFinalNote();
+  if (home.classList.contains("active-view")) {
+    scheduleFinalNote();
+    scheduleAlbumMessage();
+  }
 }
 // Background tabs never finish the narrative while the visitor is elsewhere.
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && home.classList.contains("active-view"))
+  if (!document.hidden && home.classList.contains("active-view")) {
     scheduleFinalNote();
+    scheduleAlbumMessage();
+  }
 });
 updatePhoneSignals();
 
@@ -1954,12 +2043,6 @@ function route(name) {
     persistProgress();
     scheduleIncomingCall();
   }
-  if (name === "safari") {
-    transitionMedia(null);
-    trackEvent("album_link_clicked");
-    window.open(ALBUM_URL, "_blank", "noopener");
-    return;
-  }
   const routes = {
     messages: renderMessages,
     photos: renderPhotos,
@@ -1970,6 +2053,7 @@ function route(name) {
     whatsapp: renderWhatsApp,
     spotify: renderSpotify,
     instagram: renderInstagram,
+    safari: renderSafari,
     settings: renderSettings,
     calendar: renderCalendar,
     facetime: renderFaceTime,
@@ -1984,11 +2068,13 @@ function route(name) {
   if (name === "messages") state.messagesOpened = true;
   if (name === "whatsapp") state.whatsappOpened = true;
   if (name === "notes") state.notesOpened = true;
+  if (name === "instagram") trackEvent("instagram_opened");
   if (["messages", "whatsapp", "notes", "files", "music"].includes(name))
     state.visitedApps.add(name);
   persistProgress();
   scheduleIncomingCall();
   clearTimeout(finalTimer);
+  clearTimeout(albumMessageTimer);
   hideFinalNotification();
   toastEl.classList.add("hidden");
   navigate(routes[name]);
@@ -1996,13 +2082,9 @@ function route(name) {
 }
 
 /* BOOT + POINTER GESTURES: coordinates are relative to the phone, including on desktop. */
-$("#enterBtn").onclick = () => {
-  systemSounds.enable();
-  intro.classList.remove("active");
-  phoneScene.classList.add("active");
-  setStatus(true);
-  show(lock);
-};
+// V8 starts on the live lockscreen; activation is still explicit at unlock.
+setStatus(true);
+show(lock);
 $("#unlockBtn").onclick = unlockPhone;
 $("#homeIndicator").onclick = () => {
   if (lock.classList.contains("active-view")) unlockPhone();
@@ -2018,7 +2100,9 @@ screen.addEventListener("pointerdown", (e) => {
   if (
     e.isPrimary === false ||
     state.callStatus !== "idle" ||
-    e.target.closest("input,textarea,.modal:not(.hidden)")
+    e.target.closest(
+      "input,textarea,.modal:not(.hidden),[data-horizontal-scroll]",
+    )
   )
     return;
   const r = screen.getBoundingClientRect(),

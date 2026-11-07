@@ -32,48 +32,10 @@ input {
   display: grid;
   place-items: center;
 }
-.intro {
-  display: none;
-  width: 100%;
-  min-height: 100vh;
-  place-items: center;
-  padding: 30px;
-}
-.intro.active {
-  display: grid;
-}
-.intro-card {
-  width: min(430px, 92vw);
-  color: #fff;
-}
-.intro-logo {
-  width: 90px;
-  margin-bottom: 32px;
-}
 .eyebrow {
   font-size: 11px;
   letter-spacing: 0.28em;
   color: #aaa;
-}
-.intro h1 {
-  font-size: 54px;
-  line-height: 0.94;
-  letter-spacing: -0.04em;
-  margin: 10px 0 18px;
-}
-.intro p {
-  color: #bbb;
-  line-height: 1.55;
-}
-.primary {
-  margin-top: 24px;
-  width: 100%;
-  border: 0;
-  border-radius: 18px;
-  padding: 17px;
-  background: #fff;
-  color: #000;
-  font-weight: 700;
 }
 .phone-scene {
   display: none;
@@ -1450,7 +1412,6 @@ svg.ui {
   flex-shrink: 0;
 }
 .experience,
-.intro,
 .phone-scene {
   min-height: 100dvh;
 }
@@ -3211,9 +3172,6 @@ svg.ui {
   }
   .dynamic-island {
     top: max(11px, var(--safe-top));
-  }
-  .intro {
-    padding: max(25px, env(safe-area-inset-top)) 28px;
   }
   .home-view {
     padding-left: 23px;
