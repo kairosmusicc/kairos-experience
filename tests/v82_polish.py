@@ -1,5 +1,4 @@
-"""V8.2 real browser layout/lifecycle tests. Provider frames and call playback use explicit test fixtures.
-The real call file is checked separately: a two-byte upload is NOT declared playable.
+"""V8.2 real browser layout/lifecycle tests. Provider frames use explicit test fixtures; call playback uses the actual repository WAV.
 """
 import os, wave
 from pathlib import Path
@@ -112,32 +111,34 @@ with sync_playwright() as pw:
     p.wait_for_function('document.querySelector(".official-player").dataset.playerState==="success"')
     home(p);p.clock.fast_forward(10000);assert p.locator('iframe').count()==0
  assert not errors,errors;c.close();print('PASS V8.2 Apple KAIROS/Hatelove and Spotify loading/success/error/timeout/retry/exit; isolated provider frames',flush=True)
- # Call source and recall lifecycle with explicitly substituted playable audio.
+ # Real repository call audio: initial accept/hangup, then decline/recall/natural completion.
  for recall in (False,True):
     c=b.new_context(viewport={'width':402,'height':874},is_mobile=True,has_touch=True);isolate_apple_metadata(c)
-    c.route('**/assets/audio/call%20officiel.wav',lambda r:r.fulfill(status=200,content_type='audio/wav',body=(ROOT/'assets/audio/abeg.wav').read_bytes()))
-    p=c.new_page();seen=[];p.on('request',lambda r:seen.append(r.url));boot(p);p.clock.install();app(p,'phone')
+    p=c.new_page();seen=[];failures=[]
+    p.on('request',lambda r:seen.append(r.url))
+    p.on('pageerror',lambda e:failures.append(str(e)))
+    p.on('response',lambda r:failures.append((r.status,r.url)) if r.status>=400 else None)
+    boot(p);p.clock.install();app(p,'phone')
     assert p.locator('[data-call-accept]').is_visible()
     if recall:
         p.click('[data-call-decline]');p.clock.fast_forward(61000);p.wait_for_function('state.callStatus==="ringing"')
     p.click('[data-call-accept]');p.wait_for_function('document.querySelector("#callAudio")?.currentTime>0')
-    assert p.locator('#callAudio').get_attribute('src')=='assets/audio/call officiel.wav'
-    assert not any('call-0243' in u for u in seen)
-    assert any('call%20officiel.wav' in u for u in seen)
-    p.click('[data-call-hangup]');assert p.locator('#callAudio').count()==0
+    audio=p.locator('#callAudio').element_handle()
+    assert p.locator('#callAudio').get_attribute('src')=='assets/audio/Nouvel-enregistrement-215.wav'
+    assert not any('call-0243' in u or 'call%20officiel' in u for u in seen)
+    assert any('Nouvel-enregistrement-215.wav' in u for u in seen)
+    if recall:
+        assert p.evaluate('state.unknownCallAttempts===2 && state.unknownCallRecalled')
+        p.wait_for_function('document.querySelector("#callAudio").readyState>=3')
+        p.evaluate('document.querySelector("#callAudio").currentTime=document.querySelector("#callAudio").duration-0.15')
+        p.wait_for_function('state.callStatus==="idle"')
+    else:p.click('[data-call-hangup]')
+    assert p.locator('#callAudio').count()==0
+    assert audio.evaluate('a=>a.paused && a.currentTime===0')
+    assert not failures,failures
     c.close()
- print('PASS V8.2 call source and recall wiring with explicit replacement test audio; no old-file fallback',flush=True)
- # Actual invalid upload: clean failure, never a fallback to the old recording.
- c=b.new_context(viewport={'width':402,'height':874},is_mobile=True,has_touch=True);isolate_apple_metadata(c)
- p=c.new_page();seen=[];failures=[]
- p.on('request',lambda r:seen.append(r.url));p.on('pageerror',lambda e:failures.append(str(e)))
- boot(p);app(p,'phone');p.click('[data-call-accept]');p.wait_for_function('state.callStatus==="idle"')
- assert any('call%20officiel.wav' in u for u in seen) and not any('call-0243' in u for u in seen)
- assert not failures,failures
- c.close();print('PASS invalid actual call asset: clean termination, correct URL, no old audio fallback',flush=True)
+ print('PASS real call WAV: first accept/hangup, refusal/recall/accept/natural end, no legacy request, no JS errors/404',flush=True)
  b.close()
-try:
- with wave.open(str(ROOT/'assets/audio/call officiel.wav')) as audio:assert audio.getnframes()>0
- print('PASS real call WAV format')
-except (wave.Error,EOFError):
- print('BLOCKED real call playback: repository asset is not a WAV (currently only 2 bytes). No real playback claimed.',flush=True)
+with wave.open(str(ROOT/'assets/audio/Nouvel-enregistrement-215.wav')) as audio:
+ assert audio.getnframes()>0
+ print('PASS real call WAV format and duration',audio.getnframes()/audio.getframerate(),flush=True)
