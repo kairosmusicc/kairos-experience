@@ -99,7 +99,7 @@ with sync_playwright() as p:
         assert page.locator('.album-header img').get_attribute('src')=='assets/images/kairos-cover.jpg'
         assert page.locator('[data-track^="album-"]').count()==8
         assert page.evaluate('ALBUM_TRACKS.every(t=>t.src===null && t.artwork===KAIROS_COVER)')
-        page.click('[data-track="album-0"]');assert page.locator('#toast').inner_text()=='Aperçu indisponible'
+        assert page.locator('[data-track="album-0"]').is_disabled()
         page.click('[data-track="abeg"]');page.wait_for_function('!audioManager.audio.paused')
         current=page.evaluate('audioManager.audio.currentTime')
         page.click('[data-app-back]');assert page.evaluate('!audioManager.audio.paused')

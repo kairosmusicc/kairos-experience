@@ -153,5 +153,23 @@ La suite V8.2 teste Safari-like, Chrome mobile et petit WebView en émulation Ch
 
 Les captures de contrôle sont dans `/tmp/kairos-v82`. Le proxy réseau refuse encore les fournisseurs réels ; leur rendu et la lecture dans Safari/WebViews physiques restent à valider humainement sur la preview HTTPS. Aucune Analytics n’est activée et Safari narratif reste inchangé.
 
-
 Micro-correction appel après V8.2 : `AUDIO.call` utilise désormais `assets/audio/Nouvel-enregistrement-215.wav`, le vrai WAV PCM stéréo 48 kHz de 22,036 secondes synchronisé depuis `v8-immersive`. Les suppressions des anciens fichiers proviennent du commit distant déjà présent. Les substitutions audio de test ont été retirées ; la suite V8.2 lit le vrai WAV pour le premier appel et le rappel, vérifie le raccrochage et la fin naturelle. Les limitations historiques du fichier de deux octets ci-dessus sont donc résolues.
+
+## V8.3 — Native Feel
+
+La coque existante de 422 × 914 est conservée sur mobile : seule une transformation uniforme la redimensionne. Le conteneur reste à la largeur CSS du viewport pour éviter le zoom automatique à la rotation. Le scale utilise Visual Viewport, une marge de 12 px et les safe areas du téléphone physique, placées à l’extérieur du mockup. Resize, rotation et VisualViewport.resize recalculent sa géométrie. Status bar, Dynamic Island, cadre métallique, rayons et Home Indicator restent visibles ; la batterie n’affiche toujours aucun pourcentage inventé. Les gestes utilisent désormais les coordonnées du device avant transformation. Les anciennes règles compactes basées sur la hauteur physique sont réservées aux pointeurs fins : sur mobile, la géométrie interne du téléphone reste stable pendant le scale.
+
+Le profil Manii joint directement `insta-manii-profile.webp` et le nouvel asset réel `insta-manii-feed-current.webp`, synchronisé depuis `v8-immersive`. Le chevauchement des captures est retiré par CSS, sans modifier les fichiers. Les six hotspots suivent exactement le mapping gauche/droite puis haut/bas demandé. Le bouton Publications et la ligne de lien ajoutée sous le profil Manii sont retirés. L’ouverture externe reste dans le menu du profil. Seul le post sélectionné charge l’embed officiel ; le retour conserve le scroll du profil. Aucun embed ne charge sur le profil ou sa grille.
+
+Après unlock, `requestIdleCallback` (fallback setTimeout) prépare les métadonnées Apple en arrière-plan. Les deux lookups utilisent uniquement les IDs fournis ; la réponse combinée demande aussi au maximum un aperçu par album externe. Le cache de session évite de nouvelles requêtes de métadonnées. Le premier aperçu KAIROS disponible est préchargé dans le même AudioManager, sans lancer de lecture ni changer le titre du mini-player. Les pochettes disponibles sont également préparées en cache navigateur.
+
+Play KAIROS et la sélection d’un titre lisent uniquement les sources déjà connues : aucun await ni lookup de métadonnées dans le handler. Play et les titres restent désactivés pendant « Préparation des aperçus… ». Une réponse vide ou un échec reste explicite, avec réessai manuel ; aucune URL audio n’est fabriquée. Les albums récents ouvrent immédiatement une vue locale (cover, titre, artiste et aperçu s’il existe). Le lecteur officiel Apple est secondaire et ne se crée qu’après « Ouvrir le lecteur Apple Music ». Le lifecycle loading/success/error V8.2, Spotify KAIROS, les secrets locaux et l’arrêt à la sortie sont conservés.
+
+```sh
+python3 tests/v83_native.py
+python3 tests/check_assets.py
+```
+
+Les tests V8.3 couvrent trois profils de navigateur mobile émulés, petit viewport, rotation, safe areas et réduction du Visual Viewport. Ils vérifient le cadrage des quatre bords, les gestes après scale, les six taps, le retour au scroll, le préchauffage avant Musique, les boutons désactivés, le priming sans autoplay, l’appel synchrone à audio.play dans l’activation utilisateur, TU SAIS, les albums externes locaux, les iframes explicites et le cache. Artworks, métadonnées, previews et embeds des fournisseurs sont **des fixtures isolées** ; les captures `/tmp/kairos-v83` qui les contiennent ne représentent pas une validation live des catalogues. Les tests d’appel utilisent toujours le vrai `Nouvel-enregistrement-215.wav`.
+
+Les suites historiques sont adaptées uniquement aux exigences remplacées (coque mobile complète, grille directe, vue locale avant iframe, titres indisponibles désactivés). Les fournisseurs réels restent limités par le réseau de l’environnement ; la disponibilité des médias Apple et les embeds Instagram, ainsi que Safari/iPhone physique, doivent encore être validés humainement sur la preview. Aucun merge dans main, déploiement Production ou Analytics n’est ajouté.

@@ -105,6 +105,7 @@ function renderInstagram(view = "manii-profile") {
     frame = document.createElement("div");
   shell.className = "ig-app ig-profile";
   scroll.className = "ig-scroll";
+  scroll.dataset.igProfileScroll = view;
   frame.className = "ig-capture-window";
   if (view.endsWith("-profile"))
     capture.insertAdjacentHTML(
@@ -113,26 +114,31 @@ function renderInstagram(view = "manii-profile") {
     );
   frame.append(capture);
   scroll.append(frame);
-  if (view.endsWith("-profile")) {
-    const owner = view.startsWith("paapii") ? "paapii" : "manii";
+  if (view === "manii-profile") {
+    frame.classList.add("ig-manii-top");
+    // Original images share a 120px overlap. Grid coordinates are in the supplied capture.
     scroll.insertAdjacentHTML(
       "beforeend",
-      `<div class="ig-profile-official"><b>${INSTAGRAM_PROFILES[owner].username}</b>${instagramProfileLink(owner, "Ouvrir sur Instagram")}</div>`,
+      `<div class="ig-feed-window"><img src="assets/images/insta-manii-feed-current.webp" width="944" height="1125" alt="Highlights et grille réelle du profil Manii">${MANII_REAL_INSTAGRAM_CONTENT.map((url, i) => `<button class="ig-grid-hit" data-ig-post-index="${i}" aria-label="Ouvrir ${i < 2 ? "la publication" : "le Reel"} ${i + 1}" style="left:${((i % 3) * 100) / 3}%;width:${100 / 3}%;top:${((i < 3 ? 390 : 811) / 1005) * 100}%;height:${((i < 3 ? 421 : 194) / 1005) * 100}%"></button>`).join("")}</div>`,
+    );
+    capture.insertAdjacentHTML(
+      "beforeend",
+      '<button class="hotspot" data-ig-profile-menu aria-label="Options du profil Manii" style="left:85%;top:2%;width:11%;height:6%"></button>',
     );
   }
-  if (view === "manii-profile")
+  if (view === "paapii-profile")
     scroll.insertAdjacentHTML(
       "beforeend",
-      '<button class="ig-publications-entry" data-ig-publications>' +
-        icon("grid") +
-        " Publications " +
-        icon("back") +
-        "</button>",
+      `<div class="ig-profile-official"><b>${INSTAGRAM_PROFILES.paapii.username}</b>${instagramProfileLink("paapii", "Ouvrir sur Instagram")}</div>`,
     );
   shell.append(scroll);
   shell.insertAdjacentHTML("beforeend", igBottomNav("manii-profile"));
   appContent.replaceChildren(shell);
   bindV8Controls();
+  scroll.scrollTop = igUI.profileScroll?.[view] || 0;
+  scroll.onscroll = () => {
+    (igUI.profileScroll ||= {})[view] = scroll.scrollTop;
+  };
 }
 function igNotesStrip() {
   const notes = [
@@ -365,14 +371,15 @@ function stopInstagramRealFeed() {
   instagramFeedCleanup?.();
   instagramFeedCleanup = null;
 }
-function renderInstagramRealFeed() {
+function renderInstagramRealFeed(index = 0) {
+  if (!Number.isInteger(index) || !MANII_REAL_INSTAGRAM_CONTENT[index]) return;
   stopInstagramRealFeed();
   openApp(
-    `<section class="ig-app ig-real-feed">${nav("Publications")}<div class="ig-scroll ig-real-scroll">${MANII_REAL_INSTAGRAM_CONTENT.map((url, i) => `<article class="ig-real-post" data-ig-real-post="${i}" data-embed-state="idle"><header><b>${INSTAGRAM_PROFILES.manii.username}</b><span>${new URL(url).pathname.startsWith("/reel/") ? "Reel" : "Publication"}</span></header><div class="ig-real-media"><div data-ig-embed-slot></div><p class="ig-embed-loading" role="status">Chargement de la publication…</p><div class="ig-embed-fallback hidden"><b>Publication Instagram</b><span>@${INSTAGRAM_PROFILES.manii.username}</span><a href="${url}" target="_blank" rel="noopener noreferrer">Voir la publication</a></div></div><a class="ig-external-secondary" href="${url}" target="_blank" rel="noopener noreferrer" data-instagram-public-post>Voir sur Instagram</a></article>`).join("")}</div></section>`,
+    `<section class="ig-app ig-real-feed">${nav("Publication")}<div class="ig-scroll ig-real-scroll">${MANII_REAL_INSTAGRAM_CONTENT.flatMap((url, i) => (i === index ? [`<article class="ig-real-post" data-ig-real-post="${i}" data-embed-state="idle"><header><b>${INSTAGRAM_PROFILES.manii.username}</b><span>${new URL(url).pathname.startsWith("/reel/") ? "Reel" : "Publication"}</span></header><div class="ig-real-media"><div data-ig-embed-slot></div><p class="ig-embed-loading" role="status">Chargement de la publication…</p><div class="ig-embed-fallback hidden"><b>Publication Instagram</b><span>@${INSTAGRAM_PROFILES.manii.username}</span><a href="${url}" target="_blank" rel="noopener noreferrer">Voir la publication</a></div></div><a class="ig-external-secondary" href="${url}" target="_blank" rel="noopener noreferrer" data-instagram-public-post>Voir sur Instagram</a></article>`] : [])).join("")}</div></section>`,
   );
   const root = $(".ig-real-scroll"),
     cards = $$("[data-ig-real-post]", root);
-  root.scrollTop = igUI.realFeedScroll || 0;
+  igUI.selectedPost = index;
   let current = null,
     observer = null,
     timeout = null,
@@ -664,7 +671,7 @@ function officialContent(provider, key = "kairos") {
     : null;
 }
 function officialAlbumEntry(provider) {
-  return `<div class="official-album-entry"><button data-official-embed="${provider}">${icon("globe")} Ouvrir le lecteur officiel</button></div>`;
+  return `<div class="official-album-entry"><button data-official-embed="${provider}">${icon("globe")} ${provider === "apple" ? "Ouvrir le lecteur Apple Music" : "Ouvrir le lecteur officiel"}</button></div>`;
 }
 function validatedEmbed(provider, key = "kairos") {
   const content = officialContent(provider, key);
@@ -832,7 +839,22 @@ function bindV8Controls() {
   on("[data-ig-activity]", () =>
     showSheet("Activité", "Ange Attéméné a aimé un message."),
   );
-  on("[data-ig-publications]", () => navigate(renderIGPublications));
+  on("[data-ig-post-index]", (b) =>
+    navigate(renderInstagramRealFeed, Number(b.dataset.igPostIndex)),
+  );
+  on("[data-ig-profile-menu]", () =>
+    showSheet("Instagram", INSTAGRAM_PROFILES.manii.username, [
+      {
+        label: "Ouvrir sur Instagram",
+        run: () =>
+          window.open(
+            INSTAGRAM_PROFILES.manii.url,
+            "_blank",
+            "noopener,noreferrer",
+          ),
+      },
+    ]),
+  );
   on("[data-ig-image]", (b) => navigate(renderIGImage, b.dataset.igImage));
   on("[data-ig-like]", (b) => {
     const active = b.getAttribute("aria-pressed") !== "true";
@@ -990,11 +1012,16 @@ function bindV8Controls() {
       else toast("Cette page n’est pas enregistrée sur cet iPhone");
     };
   on("[data-official-embed]", (b) =>
-    navigate(renderOfficialEmbed, b.dataset.officialEmbed, "kairos"),
+    navigate(
+      renderOfficialEmbed,
+      b.dataset.officialEmbed,
+      b.dataset.content || "kairos",
+    ),
   );
+  on("[data-catalog-play]", (b) => playAppleCatalog(b.dataset.catalogPlay));
   on("[data-apple-refresh]", () => loadAppleCatalogMetadata({ refresh: true }));
   on("[data-apple-content]", (b) =>
-    navigate(renderOfficialEmbed, "apple", b.dataset.appleContent),
+    navigate(renderAppleAlbum, b.dataset.appleContent),
   );
   on(".spotify-app [data-album-play]", () =>
     navigate(renderOfficialEmbed, "spotify", "kairos"),
@@ -1039,7 +1066,7 @@ document.addEventListener("visibilitychange", () => {
     stopInstagramRealFeed();
   } else if (state.callStatus === "idle") {
     // Recreate a removed browsing context when returning from a browser tab/app.
-    if ($(".ig-real-feed")) renderInstagramRealFeed();
+    if ($(".ig-real-feed")) renderInstagramRealFeed(igUI.selectedPost || 0);
   }
 });
 window.addEventListener("pagehide", () => {

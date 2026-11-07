@@ -18,10 +18,31 @@
           coarsePointer.matches &&
           (mobileWidth.matches || mobileLandscape.matches);
         document.documentElement.classList.toggle("mobile-experience", mobile);
-        document.documentElement.style.setProperty(
-          "--mobile-viewport-height",
-          (window.visualViewport?.height || innerHeight) + "px",
-        );
+        const viewport = window.visualViewport,
+          width = viewport?.width || innerWidth,
+          height = viewport?.height || innerHeight,
+          root = document.documentElement,
+          computed = getComputedStyle(root),
+          inset = (side) =>
+            parseFloat(computed.getPropertyValue("--viewport-safe-" + side)) ||
+            0,
+          top = inset("top"),
+          bottom = inset("bottom"),
+          left = inset("left"),
+          right = inset("right"),
+          scale = Math.max(
+            0.1,
+            Math.min(
+              (width - left - right - 24) / 422,
+              (height - top - bottom - 24) / 914,
+              1,
+            ),
+          );
+        root.style.setProperty("--mobile-viewport-height", height + "px");
+        root.style.setProperty("--mobile-viewport-width", width + "px");
+        root.style.setProperty("--mobile-device-scale", String(scale));
+        root.style.setProperty("--device-fit-x", (left - right) / 2 + "px");
+        root.style.setProperty("--device-fit-y", (top - bottom) / 2 + "px");
       }
       syncMobileExperience();
       [mobileWidth, mobileLandscape, coarsePointer].forEach((query) =>
@@ -31,6 +52,9 @@
       addEventListener("orientationchange", syncMobileExperience);
       window.visualViewport?.addEventListener("resize", syncMobileExperience);
     </script>
+    <link rel="preconnect" href="https://itunes.apple.com" crossorigin />
+    <link rel="preconnect" href="https://embed.music.apple.com" crossorigin />
+    <link rel="preconnect" href="https://is1-ssl.mzstatic.com" crossorigin />
     <meta name="theme-color" content="#000000" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta

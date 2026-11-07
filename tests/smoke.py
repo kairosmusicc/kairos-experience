@@ -119,8 +119,8 @@ with sync_playwright() as p:
         app(page, 'music')
         page.click('[data-music-album]')
         assert page.locator('[data-track^="album-"]').count() == 8
-        page.click('[data-track="album-0"]', force=True)
-        assert page.locator('#toast').inner_text() == 'Aperçu indisponible'
+        assert page.locator('[data-track="album-0"]').is_disabled()
+        assert page.locator('[data-album-play]').is_disabled()
         page.click('[data-track="tout"]')
         page.wait_for_function('audioManager.state.currentTrack.id==="tout" && !audioManager.audio.paused')
         page.screenshot(path=str(OUT / f'{label}-music.png'))

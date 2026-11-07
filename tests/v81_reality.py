@@ -5,30 +5,13 @@ import os
 from pathlib import Path
 from PIL import Image
 from playwright.sync_api import sync_playwright
-from browser_fixtures import isolate_apple_metadata, isolate_instagram_embeds
+from browser_fixtures import isolate_apple_metadata, isolate_instagram_embeds, rich_metadata
 BASE=os.environ.get('KAIROS_TEST_URL','http://127.0.0.1:8000')
 ROOT=Path(__file__).resolve().parents[1]
 OUT=Path('/tmp/kairos-v81');OUT.mkdir(exist_ok=True)
 TITLES=['KAIROS','GOD BLESS','BOULOT','BANDITE','VINCENT KOMPANY','INTERLUDE','TU SAIS','LPB']
 IOS='Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1'
 # All fixture media URLs below are intentionally test-only. Production takes URLs only from Apple responses.
-def rich_metadata(ctx):
-    seen=[]
-    ids=['6822465566','6831219034','6825863696','1695779918','6784591752']
-    names=['KAIROS','Sensation','Shogun in Lagos','Kany','Hatelove']
-    artists=['Paapii & Manii','Ronisia','Didi B','Artiste du test','Joé Dwèt Filé']
-    results=[dict(wrapperType='track' if i==3 else 'collection',collectionId=int(id),trackId=int(id),collectionName=names[i],trackName=names[i],artistName=artists[i],artworkUrl100=f'https://is1-ssl.mzstatic.com/isolated-test-fixture/{id}.png') for i,id in enumerate(ids)]
-    songs=[results[0]]+[dict(wrapperType='track',kind='song',collectionId=6822465566,trackId=i+1,trackName=t,previewUrl=f'https://audio-ssl.itunes.apple.com/isolated-test-fixture/kairos-{i}.m4a',trackTimeMillis=180000) for i,t in enumerate(TITLES)]
-    def lookup(route):
-        seen.append(route.request.url)
-        body={'results':songs if 'entity=song' in route.request.url else results,'resultCount':len(songs if 'entity=song' in route.request.url else results)}
-        route.fulfill(status=200,content_type='application/json',headers={'Access-Control-Allow-Origin':'*'},body=json.dumps(body))
-    ctx.route('https://itunes.apple.com/**',lookup)
-    image=Image.new('RGB',(100,100),'#ab889b');raw=io.BytesIO();image.save(raw,format='PNG')
-    ctx.route('https://is1-ssl.mzstatic.com/isolated-test-fixture/**',lambda r:r.fulfill(status=200,content_type='image/png',body=raw.getvalue()))
-    ctx.route('https://audio-ssl.itunes.apple.com/isolated-test-fixture/**',lambda r:r.fulfill(status=200,content_type='audio/wav',body=(ROOT/'assets/audio/abeg.wav').read_bytes()))
-    ctx.route('https://embed.music.apple.com/**',lambda r:r.fulfill(status=200,content_type='text/html',body='<p id="fixture">Isolated official player fixture</p>'))
-    return seen
 
 def app(p,n):p.locator(f'#home [data-route="{n}"]').first.click()
 def home(p):p.click('#homeIndicator')
@@ -50,7 +33,7 @@ with sync_playwright() as pw:
         assert 'Tu as trouvé' not in p.locator('#lock').inner_text()
         if ios:
             assert p.locator('html.mobile-experience').count()==1
-            assert not p.locator('#statusBar').is_visible() and not p.locator('.dynamic-island').is_visible()
+            assert p.locator('#statusBar').is_visible() and p.locator('.dynamic-island').is_visible()
         else:assert p.locator('#statusBar').is_visible()
         p.screenshot(path=str(OUT/('ios-lock.png' if ios else 'desktop-sim-lock.png')))
         p.click('#lockFlashlight');assert p.locator('#lockFlashlight').get_attribute('aria-pressed')=='true'
@@ -74,7 +57,7 @@ with sync_playwright() as pw:
         app(p,'instagram')
         assert p.locator('.full-shot').get_attribute('src').endswith('insta-manii-profile.webp')
         assert p.locator('.ig-post-grid,.ig-feed-post,[data-ig-post]').count()==0
-        p.click('[data-ig-publications]');assert p.locator('[data-instagram-public-post]').count()==6
+        assert p.locator('[data-ig-post-index]').count()==6;p.click('[data-ig-post-index="0"]');assert p.locator('[data-instagram-public-post]').count()==1
         p.click('[data-app-back]');p.click('[data-ig-view="home"]')
         assert p.locator('.full-shot').get_attribute('src').endswith('insta-manii-profile.webp')
         p.click('[data-ig-view="inbox"]')

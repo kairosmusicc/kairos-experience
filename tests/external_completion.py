@@ -78,15 +78,15 @@ with sync_playwright() as pw:
         assert p.evaluate('Object.keys(APPLE_MUSIC_CATALOG)')==list(APPLE)
         app(p,'instagram')
         assert not intercepted, 'No external fetch on profile open'
-        expect_popup(p,'[data-instagram-profile="manii"]',PROFILES['manii'][1])
-        p.click('[data-ig-publications]')
-        links=p.locator('[data-instagram-public-post]')
-        assert links.count()==6
+        p.click('[data-ig-profile-menu]')
+        with p.expect_popup() as event:p.click('[data-sheet-action="0"]')
+        popup=event.value;popup.wait_for_load_state('domcontentloaded');assert popup.url==PROFILES['manii'][1];popup.close()
+        assert p.locator('[data-ig-post-index]').count()==6
         for index,url in enumerate(POSTS):
-            assert '?' not in links.nth(index).get_attribute('href')
-            assert links.nth(index).locator('img').count()==0, 'Do not map unmatched local art to an official post'
-            expect_popup(p,f'[data-ig-real-post="{index}"] [data-instagram-public-post]',url)
-        p.click('[data-app-back]')
+            p.click(f'[data-ig-post-index="{index}"]')
+            assert p.locator('[data-instagram-public-post]').count()==1
+            expect_popup(p,'[data-instagram-public-post]',url)
+            p.click('[data-app-back]')
         p.click('[data-hot="insta-manii-following"]');p.click('[data-hot="insta-paapii-profile"]')
         assert p.locator('.full-shot').get_attribute('src').endswith('insta-paapii-profile.webp')
         expect_popup(p,'[data-instagram-profile="paapii"]',PROFILES['paapii'][1])
@@ -107,6 +107,8 @@ with sync_playwright() as pw:
         assert p.locator('[data-apple-content="kairos"] img').get_attribute('src')=='assets/images/kairos-cover.jpg'
         for key,url in APPLE.items():
             p.click('[data-apple-content="'+key+'"]')
+            assert p.locator('iframe').count()==0
+            p.click('[data-official-embed="apple"]')
             expected_height=150 if key=='kany' else 450
             frame=player_frame(p,url,expected_height)
             assert p.locator('.official-player h1').inner_text()==p.evaluate(f'APPLE_MUSIC_CATALOG.{key}.title')
@@ -115,12 +117,13 @@ with sync_playwright() as pw:
             assert set(p.locator('iframe').get_attribute('sandbox').split())=={'allow-forms','allow-popups','allow-same-origin','allow-scripts','allow-storage-access-by-user-activation','allow-top-navigation-by-user-activation'}
             p.screenshot(path=str(OUT/f'{"desktop" if desktop else "mobile"}-apple-{key}-isolated.png'))
             p.click('[data-app-back]');assert p.locator('iframe').count()==0;assert frame.is_detached()
+            p.click('[data-app-back]')
             assert p.locator('[data-apple-content]').count()==5
         # Local audio is stopped before an iframe browsing context can be created.
         p.evaluate('state.abegUnlocked=true;state.toutGacherUnlocked=true;renderMusic()')
         p.click('[data-track="abeg"]');p.wait_for_function('audioManager.audio.currentTime>0')
         p.evaluate('''()=>{window.__overlap=false;window.__observer=new MutationObserver(()=>{if(document.querySelector('iframe')&&!audioManager.audio.paused)window.__overlap=true});window.__observer.observe(document.body,{childList:true,subtree:true})}''')
-        p.click('[data-apple-content="kairos"]');player_frame(p,APPLE['kairos'],450)
+        p.click('[data-official-embed="apple"]');player_frame(p,APPLE['kairos'],450)
         assert p.evaluate('audioManager.audio.paused && audioManager.audio.currentTime===0 && !window.__overlap')
         # Switching provider/content retains exactly one context and destroys the previous frame.
         old=p.locator('iframe').element_handle().content_frame()
@@ -140,7 +143,7 @@ with sync_playwright() as pw:
         p.click('[data-app-back]');assert frame.is_detached()
         p.click('.spotify-cover-button');frame=player_frame(p,SPOTIFY,450)
         p.evaluate('route("notes")');assert p.locator('iframe').count()==0 and frame.is_detached()
-        home(p);app(p,'music');p.click('[data-apple-content="hatelove"]');frame=player_frame(p,APPLE['hatelove'],450)
+        home(p);app(p,'music');p.click('[data-apple-content="hatelove"]');p.click('[data-official-embed="apple"]');frame=player_frame(p,APPLE['hatelove'],450)
         # Same Home gesture path, with real touch events on the phone's indicator area.
         r=p.locator('.screen').bounding_box();cdp=ctx.new_cdp_session(p)
         cdp.send('Input.dispatchTouchEvent',{'type':'touchStart','touchPoints':[{'x':r['x']+180,'y':r['y']+r['height']-12}]})
@@ -153,7 +156,7 @@ with sync_playwright() as pw:
         assert p.evaluate('audioManager.audio.paused')
         p.click('[data-call-hangup]');home(p)
         # Hiding the page also tears down external playback; no automatic recreation.
-        app(p,'music');p.click('[data-apple-content="sensation"]');frame=player_frame(p,APPLE['sensation'],450)
+        app(p,'music');p.click('[data-apple-content="sensation"]');p.click('[data-official-embed="apple"]');frame=player_frame(p,APPLE['sensation'],450)
         p.evaluate('()=>{Object.defineProperty(document,"hidden",{configurable:true,value:true});document.dispatchEvent(new Event("visibilitychange"))}')
         assert p.locator('iframe').count()==0 and frame.is_detached()
         p.evaluate('()=>{Object.defineProperty(document,"hidden",{configurable:true,value:false});document.dispatchEvent(new Event("visibilitychange"))}')

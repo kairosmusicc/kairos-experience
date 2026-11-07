@@ -76,13 +76,23 @@ function applyAppleMetadata(data) {
           : r.wrapperType === "collection"),
     );
     if (!row) continue;
+    const preview =
+      item.type === "track"
+        ? row
+        : (data.results || []).find(
+            (r) =>
+              r.wrapperType === "track" &&
+              String(r.collectionId) === appleId(key) &&
+              appleMediaURL(r.previewUrl),
+          );
     appleMetadataState.catalog[key] = {
       title:
         (item.type === "track" ? row.trackName : row.collectionName) ||
         item.title,
       artist: row.artistName || item.artist || "",
       artwork: appleMediaURL(row.artworkUrl100 || row.artworkUrl60),
-      previewUrl: appleMediaURL(row.previewUrl),
+      previewUrl: appleMediaURL(preview?.previewUrl),
+      previewTitle: preview?.trackName || row.trackName || item.title,
     };
   }
 }
@@ -141,7 +151,9 @@ async function loadAppleCatalogMetadata({ refresh = false } = {}) {
         const ids = Object.keys(APPLE_MUSIC_CATALOG).map(appleId).join(",");
         const results = await Promise.allSettled([
           appleLookup(
-            "https://itunes.apple.com/lookup?id=" + ids + "&country=FR",
+            "https://itunes.apple.com/lookup?id=" +
+              ids +
+              "&entity=song&limit=1&country=FR",
           ),
           appleLookup(
             "https://itunes.apple.com/lookup?id=" +
@@ -171,6 +183,15 @@ async function loadAppleCatalogMetadata({ refresh = false } = {}) {
       applyAppleMetadata(catalog);
       applyAppleMetadata(songs);
       applyKairosPreviews(songs);
+      audioManager.prime(ALBUM_TRACKS.find((track) => track.src));
+      for (const key of Object.keys(APPLE_MUSIC_CATALOG)) {
+        const src = appleArtwork(key);
+        if (src) {
+          const image = new Image();
+          image.decoding = "async";
+          image.src = src;
+        }
+      }
       appleMetadataState.loaded = true;
       // A partial response must not leave missing artwork spinning forever.
       appleMetadataState.error ||=
@@ -231,9 +252,30 @@ function syncAppleCatalogUI() {
       ? "Aperçu Apple Music"
       : "Aperçu indisponible";
   });
+  const ready = ALBUM_TRACKS.some((t) => t.src),
+    preparing =
+      appleMetadataState.loading ||
+      (!appleMetadataState.loaded && !appleMetadataState.error);
+  $$(".music-app [data-player-toggle]").forEach((button) => {
+    button.disabled = !audioManager.state.currentTrack && !ready;
+  });
+  $$(".music-app [data-album-play], .music-app [data-shuffle]").forEach(
+    (button) => {
+      button.disabled = !ready;
+    },
+  );
+  $$('.music-app [data-track^="album-"]').forEach((row) => {
+    row.disabled = !ALBUM_TRACKS.find((t) => t.id === row.dataset.track)?.src;
+  });
+  $$("[data-catalog-play]").forEach((button) => {
+    const key = button.dataset.catalogPlay;
+    const available = !!appleMetadataState.catalog[key]?.previewUrl;
+    button.disabled = !available;
+    button.innerHTML = `${icon("play")} ${available ? "Lecture" : preparing ? "Préparation des aperçus…" : "Aperçu indisponible"}`;
+  });
   $$("[data-apple-loading]").forEach((el) => {
-    el.textContent = appleMetadataState.loading
-      ? "Chargement des aperçus…"
+    el.textContent = preparing
+      ? "Préparation des aperçus…"
       : appleMetadataState.error
         ? "Métadonnées Apple indisponibles"
         : "";
@@ -247,35 +289,62 @@ function syncAppleCatalogUI() {
   );
   syncAudioUI();
 }
-async function playKairos(trackId = null) {
-  const view = state.currentView,
-    app = state.currentApp;
-  if (app !== "music") return;
-  await loadAppleCatalogMetadata();
-  if (
-    state.currentView !== view ||
-    state.currentApp !== app ||
-    state.callStatus !== "idle"
-  )
-    return;
+let appleWarmScheduled = false;
+function warmAppleMusic() {
+  if (appleWarmScheduled) return;
+  appleWarmScheduled = true;
+  const warm = () => {
+    loadAppleCatalogMetadata().catch(() => {});
+  };
+  if (window.requestIdleCallback) requestIdleCallback(warm, { timeout: 1000 });
+  else setTimeout(warm, 0);
+}
+function playKairos(trackId = null) {
+  if (state.currentApp !== "music" || state.callStatus !== "idle") return;
   const available = ALBUM_TRACKS.filter((t) => t.src);
   const track = trackId
-    ? ALBUM_TRACKS.find((t) => t.id === trackId)
+    ? available.find((t) => t.id === trackId)
     : audioManager.state.shuffle
       ? available[Math.floor(Math.random() * available.length)]
       : available[0];
-  if (!track?.src) {
-    toast("Aperçu indisponible");
-    return;
-  }
+  if (!track) return;
   stopOfficialEmbeds();
-  await audioManager.play(track);
+  return audioManager.play(track);
+}
+function catalogPreview(key) {
+  const meta = appleMetadataState.catalog[key];
+  if (!meta?.previewUrl) return null;
+  return {
+    id: "catalog-" + key,
+    source: "apple-catalog",
+    catalogKey: key,
+    title: meta.previewTitle || meta.title,
+    artist: meta.artist,
+    artwork: appleArtwork(key),
+    src: meta.previewUrl,
+  };
+}
+function playAppleCatalog(key) {
+  if (state.currentApp !== "music" || state.callStatus !== "idle") return;
+  const track = catalogPreview(key);
+  if (!track) return;
+  stopOfficialEmbeds();
+  return audioManager.play(track);
+}
+function renderAppleAlbum(key = "kairos") {
+  if (!APPLE_MUSIC_CATALOG[key]) return;
+  if (key === "kairos") return renderMusic("album");
+  const item = APPLE_MUSIC_CATALOG[key],
+    meta = appleMetadataState.catalog[key];
+  openApp(
+    `<section class="music-app apple-local-album">${nav("Bibliothèque")}${appleArtworkHTML(key)}<h1 data-apple-title="${key}">${escapeHTML(meta?.title || item.title)}</h1><p data-apple-artist="${key}">${escapeHTML(meta?.artist || item.artist || "")}</p><div class="album-actions"><button data-catalog-play="${key}">${icon("play")} Lecture</button></div><button class="apple-full-link" data-official-embed="apple" data-content="${key}">Ouvrir le lecteur Apple Music</button>${miniPlayer()}</section>`,
+  );
 }
 function renderPreviewPlayer(id) {
   const t = ALBUM_TRACKS.find((t) => t.id === id);
   if (!t?.src) return;
   audioManager.load(t);
   openApp(
-    `<div class="audio-player">${nav(t.title)}<img class="audio-cover" src="${KAIROS_COVER}" alt="Cover KAIROS"><h2>${t.title}</h2><p>Paapii & Manii</p>${playerControls()}<p class="preview-credit">Aperçu Apple Music</p><button class="apple-full-link" data-official-embed="apple">Écouter sur Apple Music</button></div>`,
+    `<div class="audio-player">${nav(t.title)}<img class="audio-cover" src="${KAIROS_COVER}" alt="Cover KAIROS"><h2>${t.title}</h2><p>Paapii & Manii</p>${playerControls()}<p class="preview-credit">Aperçu Apple Music</p><button class="apple-full-link" data-official-embed="apple">Ouvrir le lecteur Apple Music</button></div>`,
   );
 }

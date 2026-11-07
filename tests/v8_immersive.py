@@ -58,7 +58,7 @@ with sync_playwright() as pw:
         app(p,'instagram');assert p.locator('.full-shot').get_attribute('src').endswith('insta-manii-profile.webp')
         for hotspot in ['insta-manii-following','insta-paapii-profile','insta-paapii-following','insta-manii-profile']:
             p.click('[data-hot="'+hotspot+'"]')
-        p.click('[data-ig-publications]');assert p.locator('[data-instagram-public-post]').count()==6
+        assert p.locator('[data-ig-post-index]').count()==6;p.click('[data-ig-post-index="0"]');assert p.locator('[data-instagram-public-post]').count()==1
         p.click('[data-app-back]');p.click('[data-ig-view="inbox"]')
         assert 'manii_mu' in p.locator('.ig-username').inner_text()
         assert p.locator('#igInboxSearch').get_attribute('placeholder')=='Recherchez ou demandez à Meta AI'

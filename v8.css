@@ -1383,18 +1383,6 @@
   color: #1ed760;
 }
 /* V8.1: native iOS chrome, honest battery fallback and an uncluttered personal lockscreen. */
-.mobile-experience .status-bar,
-.mobile-experience .dynamic-island {
-  display: none !important;
-}
-@media (max-width: 600px) {
-  .mobile-experience {
-    --status-height: env(safe-area-inset-top, 0px);
-  }
-  .mobile-experience .home-view {
-    padding-top: calc(var(--status-height) + 28px);
-  }
-}
 .status-bar.light-status .battery-unknown {
   background: transparent;
   color: #111;
@@ -1690,33 +1678,42 @@
   height: 100%;
   background: #edeaef;
 }
-/* V8.2: phone browser chrome belongs to the physical device, on every mobile browser. */
-.mobile-experience {
-  --status-height: env(safe-area-inset-top, 0px);
-  --safe-top: env(safe-area-inset-top, 0px);
-  --safe-bottom: env(safe-area-inset-bottom, 0px);
-  --bottom-space: max(29px, var(--safe-bottom));
+:root {
+  --viewport-safe-top: env(safe-area-inset-top, 0px);
+  --viewport-safe-bottom: env(safe-area-inset-bottom, 0px);
+  --viewport-safe-left: env(safe-area-inset-left, 0px);
+  --viewport-safe-right: env(safe-area-inset-right, 0px);
 }
-.mobile-experience .experience,
+/* V8.3: the existing full device is fitted, never stretched or cropped. */
+.mobile-experience {
+  --safe-top: 0px;
+  --safe-bottom: 0px;
+  --status-height: 59px;
+  --bottom-space: 29px;
+}
+.mobile-experience .experience {
+  width: 100vw;
+  overflow: hidden;
+  min-height: 0;
+  height: var(--mobile-viewport-height, 100dvh);
+}
 .mobile-experience .phone-scene {
+  position: relative;
+  width: 100%;
+  height: var(--mobile-viewport-height, 100dvh);
+  min-height: 0;
   padding: 0;
-  min-height: 100vh;
-  min-height: 100dvh;
-  min-height: var(--mobile-viewport-height, 100dvh);
+  overflow: hidden;
+  background: #000;
 }
 .mobile-experience .device {
-  width: 100%;
-  max-width: none;
-  height: var(--mobile-viewport-height, 100dvh);
-  border: 0;
-  border-radius: 0;
-  box-shadow: none;
-}
-.mobile-experience .screen {
-  border-radius: 0;
-}
-.mobile-experience .home-view {
-  padding-top: calc(var(--status-height) + 28px);
+  position: absolute;
+  width: 422px;
+  height: 914px;
+  left: calc(50% + var(--device-fit-x, 0px));
+  top: calc(50% + var(--device-fit-y, 0px));
+  transform: translate(-50%, -50%) scale(var(--mobile-device-scale, 1));
+  transform-origin: center;
 }
 .lock-padlock {
   display: block;
@@ -1729,9 +1726,6 @@
   width: 100%;
   height: 100%;
 }
-.mobile-experience .lock-center {
-  top: calc(env(safe-area-inset-top, 0px) + clamp(32px, 10dvh, 90px));
-}
 .lock-view .unlock {
   width: 260px;
   color: white;
@@ -1741,21 +1735,6 @@
 .screen:has(.lock-view.active-view) .home-indicator:after {
   opacity: 1;
   background: white;
-}
-@media (max-height: 500px) {
-  .mobile-experience .lock-center {
-    top: calc(env(safe-area-inset-top, 0px) + 8px);
-  }
-  .mobile-experience .lock-padlock {
-    margin-bottom: 3px;
-    height: 20px;
-  }
-  .mobile-experience .lock-time {
-    font-size: 64px;
-  }
-  .mobile-experience .lock-shortcuts {
-    bottom: calc(var(--bottom-space) + 40px);
-  }
 }
 .ig-real-post {
   border-bottom: 1px solid #eee;
@@ -1820,4 +1799,70 @@
 }
 .ig-real-scroll {
   padding-bottom: calc(var(--bottom-space) + 22px);
+}
+
+/* Real profile continuity: crop only the duplicated capture overlap. */
+.ig-profile .ig-manii-top {
+  aspect-ratio: 944 / 1672;
+}
+.ig-feed-window {
+  position: relative;
+  aspect-ratio: 944 / 1005;
+  overflow: hidden;
+}
+.ig-feed-window > img {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: -12.7118644%;
+}
+.ig-grid-hit {
+  position: absolute;
+  border: 0;
+  background: transparent;
+  border-radius: 0;
+  min-height: 0;
+  padding: 0;
+}
+.ig-grid-hit:focus-visible {
+  outline: 3px solid #0095f6;
+  outline-offset: -3px;
+}
+.ig-profile .ig-scroll {
+  padding-bottom: 0;
+}
+.music-app button:disabled {
+  opacity: 0.45;
+  cursor: default;
+}
+.apple-local-album {
+  padding: 0 20px 150px;
+}
+.apple-local-album .nav {
+  margin: 0 -20px;
+}
+.apple-local-album > .apple-artwork {
+  width: 220px;
+  height: 220px;
+  display: block;
+  margin: 20px auto;
+}
+.apple-local-album > h1,
+.apple-local-album > p {
+  text-align: center;
+}
+.apple-local-album > h1 {
+  margin-bottom: 5px;
+}
+.apple-local-album > p {
+  color: #888;
+  margin-top: 5px;
+}
+.apple-local-album .mini-player {
+  left: 14px;
+  right: 14px;
+}
+
+.apple-local-album .mini-player {
+  bottom: calc(var(--bottom-space) + 12px);
 }

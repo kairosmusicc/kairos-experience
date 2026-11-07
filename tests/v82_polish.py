@@ -27,7 +27,7 @@ with sync_playwright() as pw:
     for width,height in [(w,h),(h,w),(w,480),(w,h)]:
         p.set_viewport_size({'width':width,'height':height});p.wait_for_timeout(150)
         assert p.locator('html.mobile-experience').count()==1
-        assert not p.locator('#statusBar').is_visible() and not p.locator('.dynamic-island').is_visible()
+        assert p.locator('#statusBar').is_visible() and p.locator('.dynamic-island').is_visible()
         for sel in ['.lock-padlock','#lockDate','#lockTime','#lockFlashlight','#lockCamera','#unlockBtn','#homeIndicator']:inside(p,sel)
         assert p.locator('#lockTime').inner_text()
         assert p.locator('#homeIndicator').evaluate('e=>getComputedStyle(e,"::after").opacity')=='1'
@@ -36,7 +36,7 @@ with sync_playwright() as pw:
     # Visual viewport can shrink without changing CSS layout viewport (browser chrome/keyboard).
     p.evaluate('Object.defineProperty(visualViewport,"height",{configurable:true,value:460});visualViewport.dispatchEvent(new Event("resize"))')
     p.wait_for_timeout(100)
-    box=p.locator('.screen').bounding_box();assert box['y']<1 and abs(box['height']-460)<2,box
+    box=p.locator('.device').bounding_box();assert box['y']>=11 and box['y']+box['height']<=449,box
     for sel in ['.lock-padlock','#lockDate','#lockTime','#lockFlashlight','#lockCamera','#unlockBtn','#homeIndicator']:inside(p,sel)
     p.evaluate('delete visualViewport.height;visualViewport.dispatchEvent(new Event("resize"))')
     p.screenshot(path=str(OUT/(name+'-lock.png')))
@@ -53,14 +53,15 @@ with sync_playwright() as pw:
  p.on('pageerror',lambda e:errors.append(str(e)));p.on('request',lambda r:requests.append(r.url))
  boot(p);assert not any('instagram.com' in u for u in requests)
  app(p,'instagram');assert not any('embed.js' in u for u in requests)
- p.click('[data-ig-publications]');assert p.locator('[data-ig-real-post]').count()==6
+ assert p.locator('[data-ig-post-index]').count()==6
  urls=p.evaluate('MANII_REAL_INSTAGRAM_CONTENT')
  for i,url in enumerate(urls):
-    card=p.locator(f'[data-ig-real-post="{i}"]');card.scroll_into_view_if_needed()
+    p.click(f'[data-ig-post-index="{i}"]');card=p.locator(f'[data-ig-real-post="{i}"]')
     p.wait_for_function('(i)=>document.querySelector(`[data-ig-real-post="${i}"]`).dataset.embedState==="success"',arg=i)
     assert card.locator('iframe').get_attribute('data-permalink')==url
     assert p.locator('.ig-real-feed iframe').count()==1
     assert card.locator('[data-instagram-public-post]').get_attribute('href')==url
+    if i<5:p.click('[data-app-back]')
  assert len([u for u in requests if u=='https://www.instagram.com/embed.js'])==1
  p.screenshot(path=str(OUT/'instagram-isolated-fixture.png'))
  # Hidden contexts are torn down; return restores the scroll without another script.
@@ -69,13 +70,13 @@ with sync_playwright() as pw:
  p.evaluate('Object.defineProperty(document,"hidden",{configurable:true,value:false});document.dispatchEvent(new Event("visibilitychange"))')
  p.wait_for_function('(i)=>document.querySelector(`[data-ig-real-post="${i}"]`).dataset.embedState==="success"',arg=5)
  home(p);assert p.locator('iframe,blockquote').count()==0
- app(p,'instagram');p.click('[data-ig-publications]');p.wait_for_function('(i)=>document.querySelector(`[data-ig-real-post="${i}"]`).dataset.embedState==="success"',arg=5)
+ app(p,'instagram');p.click('[data-ig-post-index="5"]');p.wait_for_function('(i)=>document.querySelector(`[data-ig-real-post="${i}"]`).dataset.embedState==="success"',arg=5)
  assert p.locator('script[data-instagram-embed-script]').count()==1
  assert not errors,errors;c.close();print('PASS V8.2 Instagram six permalinks rendered inside shell with isolated embed script; one active frame; cleanup and singleton',flush=True)
  # Script unavailable => clean fallback without navigation.
  c=b.new_context(viewport={'width':402,'height':874},is_mobile=True,has_touch=True);isolate_apple_metadata(c)
  c.route('https://www.instagram.com/embed.js',lambda r:r.fulfill(status=200,content_type='application/javascript',body='/* unavailable provider fixture */'))
- p=c.new_page();boot(p);app(p,'instagram');p.click('[data-ig-publications]')
+ p=c.new_page();boot(p);app(p,'instagram');p.click('[data-ig-post-index="0"]')
  p.locator('[data-ig-real-post="0"] .ig-embed-fallback').wait_for(state='visible');assert p.url.startswith(BASE)
  assert p.locator('.ig-embed-fallback a').first.get_attribute('href')==urls[0];c.close();print('PASS V8.2 Instagram rejected embed fallback',flush=True)
  # Official player state machine, requests held deliberately to inspect LOADING.
@@ -86,6 +87,8 @@ with sync_playwright() as pw:
  for provider,key in [('apple','kairos'),('apple','hatelove'),('spotify','kairos')]:
     app(p,'music' if provider=='apple' else 'spotify')
     p.click(f'[data-apple-content="{key}"]' if provider=='apple' else '[data-album-play]')
+    if provider=='apple':
+        assert p.locator('iframe').count()==0;p.click('[data-official-embed="apple"]')
     p.wait_for_function('document.querySelector("[data-official-frame]")!==null')
     assert p.locator('.official-player').get_attribute('data-player-state')=='loading'
     assert p.locator('[data-official-loading]').is_visible()
