@@ -22,7 +22,7 @@ const INSTAGRAM_PROFILES = {
     url: "https://www.instagram.com/prodbyredka/",
   },
 };
-const INSTAGRAM_PUBLIC_POSTS = [
+const MANII_REAL_INSTAGRAM_CONTENT = [
   "https://www.instagram.com/p/DezXPBwiOxd/",
   "https://www.instagram.com/p/De90ubzOOuZ/",
   "https://www.instagram.com/reel/DfFiuwHIyyN/",
@@ -30,6 +30,7 @@ const INSTAGRAM_PUBLIC_POSTS = [
   "https://www.instagram.com/reel/DfP7VvKodGb/",
   "https://www.instagram.com/reel/DfXpuedCD04/",
 ];
+const INSTAGRAM_PUBLIC_POSTS = MANII_REAL_INSTAGRAM_CONTENT;
 const APPLE_MUSIC_CATALOG = {
   kairos: {
     type: "album",

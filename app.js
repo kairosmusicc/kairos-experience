@@ -35,6 +35,8 @@ function storedJSON(key, fallback) {
 const savedProgress = storedJSON("kairos.progress", {});
 const state = {
   phoneUnlocked: false,
+  lockCameraActive: false,
+  flashlightOn: false,
   currentApp: null,
   currentView: null,
   navigationStack: [],
@@ -76,7 +78,7 @@ const state = {
   finalAlbumMessageAvailable: !!savedProgress.finalAlbumMessageAvailable,
   finalAlbumMessageRead: !!savedProgress.finalAlbumMessageRead,
   finalAlbumMessageAt: savedProgress.finalAlbumMessageAt || 0,
-  safariKairosAvailable: !!savedProgress.safariKairosAvailable,
+  safariKairosAvailable: true,
   albumLinkClicked: !!savedProgress.albumLinkClicked,
   instagramReplies: savedProgress.instagramReplies || {},
   instagramReactions: savedProgress.instagramReactions || {},
@@ -97,6 +99,7 @@ function navigate(renderer, ...args) {
   renderer(...args);
 }
 function unlockPhone() {
+  state.lockCameraActive = false;
   systemSounds.enable();
   if (!state.phoneUnlocked) trackEvent("phone_unlocked");
   state.phoneUnlocked = true;
@@ -294,12 +297,19 @@ function syncClock() {
 }
 syncClock();
 setInterval(syncClock, 10000);
+// iOS uses the real system chrome; unknown batteries never receive an invented number.
+const iosNative =
+  document.documentElement.classList.contains("ios-native-chrome");
+$(".battery-pill").classList.add("battery-unknown");
 if (navigator.getBattery) {
   navigator
     .getBattery()
     .then((b) => {
-      const update = () =>
-        ($("#batteryLevel").textContent = Math.round(b.level * 100));
+      const update = () => {
+        if (!Number.isFinite(b.level) || b.level < 0 || b.level > 1) return;
+        $("#batteryLevel").textContent = Math.round(b.level * 100);
+        $(".battery-pill").classList.remove("battery-unknown");
+      };
       update();
       b.addEventListener("levelchange", update);
     })
@@ -321,6 +331,11 @@ function icon(name) {
     tabs: '<rect x="7" y="3" width="14" height="14" rx="3"/><path d="M17 17v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h3"/>',
     globe:
       '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-6 6-6 12 0 18 6-6 6-12 0-18z"/>',
+    flashlight: '<path d="M6 3h12v4l-3 4v10H9V11L6 7zM6 7h12M12 14v3"/>',
+    gallery:
+      '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="2"/><path d="m4 17 5-5 4 4 3-3 5 5"/>',
+    sticker:
+      '<path d="M4 4h16v10l-6 6H4zM14 20v-6h6M8 9h.01M15 9h.01M8 13q4 3 7 0"/>',
     music:
       '<path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/>',
     pause: '<path d="M9 5v14M15 5v14"/>',
@@ -378,6 +393,7 @@ function show(v) {
 }
 function goHome() {
   if (state.callStatus !== "idle") return;
+  if (state.lockCameraActive && !state.phoneUnlocked) return returnToLock();
   if (!state.phoneUnlocked) return unlockPhone();
   transitionMedia(null);
   state.navigationStack = [];
@@ -401,8 +417,10 @@ function openApp(html, { dark = false } = {}) {
   enhanceControls();
   syncAudioUI();
   bindV8Controls();
+  syncAppleCatalogUI();
 }
 function goBack() {
+  if (state.lockCameraActive && !state.phoneUnlocked) return returnToLock();
   if (state.callStatus !== "idle") return;
   if ($("#photoViewer.open")) return closePhoto();
   const previous = state.navigationStack.pop();
@@ -593,9 +611,10 @@ const ALBUM_TRACKS = [
 ].map((title, i) => ({
   id: "album-" + i,
   title,
-  artist: "Manii & Paapii",
+  artist: "Paapii & Manii",
   artwork: KAIROS_COVER,
   src: null,
+  source: "apple-preview",
 }));
 const SECRET_TRACKS = [
   {
@@ -655,7 +674,10 @@ class AudioManager {
   available() {
     return SECRET_TRACKS.filter((t) => secretUnlocked(t.id));
   }
-  load(track, queue = this.available()) {
+  load(
+    track,
+    queue = track?.source === "apple-preview" ? ALBUM_TRACKS : this.available(),
+  ) {
     if (!track?.src) {
       toast("Audio indisponible");
       return false;
@@ -664,6 +686,7 @@ class AudioManager {
       toast("Appel en cours");
       return false;
     }
+    if (track.source === "apple-preview") stopOfficialEmbeds();
     this.state.queue = queue.filter((t) => t.src);
     if (this.state.currentTrack?.id !== track.id) {
       this.audio.src = track.src;
@@ -681,6 +704,10 @@ class AudioManager {
     const generation = ++this.playGeneration;
     if (track && !this.load(track)) return;
     if (!this.state.currentTrack) {
+      if (state.currentApp === "music") {
+        await playKairos();
+        return;
+      }
       const first = this.available()[0];
       if (!first) {
         toast("Les fichiers audio sont encore verrouillés");
@@ -761,6 +788,14 @@ function syncAudioUI() {
   $$("[data-now-title]").forEach(
     (el) => (el.textContent = t?.title || "Aucune lecture"),
   );
+  $$("[data-now-artist]").forEach(
+    (el) => (el.textContent = t?.artist || "Paapii & Manii"),
+  );
+  $$("[data-mini-progress]").forEach(
+    (el) =>
+      (el.style.width =
+        (m.duration ? (m.currentTime / m.duration) * 100 : 0) + "%"),
+  );
   $$("[data-now-art]").forEach((el) => {
     el.src = t?.artwork || KAIROS_COVER;
   });
@@ -785,7 +820,7 @@ function syncAudioUI() {
   );
 }
 function miniPlayer() {
-  return `<div class="mini-player liquid"><button class="mini-info" data-now-open><img data-now-art src="${KAIROS_COVER}" alt="Pochette"><span><b data-now-title>Aucune lecture</b><small>Manii & Paapii</small></span></button>${iconButton("play", "Lecture", "data-player-toggle")}${iconButton("next", "Morceau suivant", "data-player-next")}</div>`;
+  return `<div class="mini-player liquid"><button class="mini-info" data-now-open><img data-now-art src="${KAIROS_COVER}" alt="Pochette"><span><b data-now-title>Aucune lecture</b><small data-now-artist>Paapii & Manii</small></span></button>${iconButton("play", "Lecture", "data-player-toggle")}${iconButton("next", "Morceau suivant", "data-player-next")}<span class="mini-progress"><i data-mini-progress></i></span></div>`;
 }
 function playerControls() {
   return `<div class="player-seek"><input type="range" min="0" max="100" step="0.1" value="0" aria-label="Progression audio" data-player-seek><div><span data-player-time>0:00</span><span data-player-duration>0:00</span></div></div><div class="controls">${iconButton("previous", "Morceau précédent", "data-player-prev")}<button class="play" data-player-toggle aria-label="Lecture">${icon("play")}</button>${iconButton("next", "Morceau suivant", "data-player-next")}</div>`;
@@ -802,16 +837,17 @@ function musicTrackRows(tracks) {
   return tracks
     .map(
       (t, i) =>
-        `<button class="music-track ${t.src ? "" : "unavailable"}" data-track="${t.id}" data-audio-available="${!!t.src}"><span>${t.src ? icon("play") : i + 1}</span><span><b>${t.title}</b><small>${t.src ? "Manii & Paapii" : "Audio à venir"}</small></span>${icon("ellipsis")}</button>`,
+        `<button class="music-track ${t.src ? "" : "unavailable"}" data-track="${t.id}" data-audio-available="${!!t.src}"><span>${t.src ? icon("play") : i + 1}</span><span><b>${t.title}</b><small>${t.source === "apple-preview" ? (t.src ? "Aperçu Apple Music" : "Aperçu indisponible") : "Manii & Paapii"}</small></span>${icon("ellipsis")}</button>`,
     )
     .join("");
 }
 function renderMusic(view = "library") {
+  loadAppleCatalogMetadata();
   const available = audioManager.available();
   const library = `<div class="list-toolbar"><span>Bibliothèque</span>${iconButton("ellipsis", "Options", "data-options")}</div><h1 class="section-title">Bibliothèque</h1><div class="library-categories"><button data-music-album>${icon("contacts")} Artistes ${icon("back")}</button><button data-music-album>${icon("file")} Albums ${icon("back")}</button><button data-music-album>${icon("music")} Morceaux ${icon("back")}</button></div><h2 class="subheading">Ajouts récents</h2><button class="album-tile" data-music-album><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><b>KAIROS</b><span>Manii & Paapii</span></button>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : '<p class="muted library-hint">Quelques fichiers sont restés dans les archives.</p>'}`;
-  const album = `${nav("Bibliothèque", "•••")}<div class="album-header"><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii</p><small>ALBUM · 8 MORCEAUX</small></div><div class="album-actions"><button data-album-play>${icon("play")} Lecture</button><button data-shuffle>${icon("shuffle")} Aléatoire</button></div><div>${musicTrackRows(ALBUM_TRACKS)}</div><p class="muted album-notice">Les morceaux de l’album ne sont pas encore stockés sur cet iPhone.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}`;
+  const album = `${nav("Bibliothèque", "•••")}<div class="album-header"><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii</p><small>ALBUM · 8 MORCEAUX</small></div><div class="album-actions"><button data-album-play>${icon("play")} Lecture</button><button data-shuffle>${icon("shuffle")} Aléatoire</button></div><div>${musicTrackRows(ALBUM_TRACKS)}</div><p class="muted album-notice">Aperçus officiels Apple Music.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}`;
   openApp(
-    `<div class="music-app">${view === "album" ? album : library}${view === "library" ? appleRecentlyPlayed() : ""}${officialAlbumEntry("apple")}${miniPlayer()}<div class="music-tabs"><button class="active" data-music-library>${icon("file")}<span>Bibliothèque</span></button><button data-music-album>${icon("music")}<span>KAIROS</span></button><button data-music-search>${icon("search")}<span>Rechercher</span></button></div></div>`,
+    `<div class="music-app">${view === "album" ? album : library}${view === "library" ? appleRecentlyPlayed() : ""}<p data-apple-loading class="apple-loading"></p><button data-apple-refresh class="hidden apple-retry">Réessayer</button>${officialAlbumEntry("apple")}${miniPlayer()}<div class="music-tabs"><button class="active" data-music-library>${icon("file")}<span>Bibliothèque</span></button><button data-music-album>${icon("music")}<span>KAIROS</span></button><button data-music-search>${icon("search")}<span>Rechercher</span></button></div></div>`,
   );
 }
 
@@ -1041,7 +1077,9 @@ function audioContextFor(view, app = state.currentApp) {
   if (!view) return null;
   if (
     (app === "music" || app === "spotify") &&
-    [renderMusic, renderSpotify, renderAudio].includes(view.renderer)
+    [renderMusic, renderSpotify, renderAudio, renderPreviewPlayer].includes(
+      view.renderer,
+    )
   )
     return app;
   if (view.renderer === renderAudio) return `file:${view.args[0]}`;
@@ -1575,19 +1613,28 @@ function bindDynamic() {
     const t = [...ALBUM_TRACKS, ...audioManager.available()].find(
       (t) => t.id === b.dataset.track,
     );
-    if (t) audioManager.play(t);
+    if (t?.source === "apple-preview") {
+      if (state.currentApp === "spotify")
+        navigate(renderOfficialEmbed, "spotify", "kairos");
+      else playKairos(t.id);
+    } else if (t) audioManager.play(t);
   });
   on("[data-music-album]", () => navigate(renderMusic, "album"));
   on("[data-music-library]", () => navigate(renderMusic));
   on("[data-now-open]", () => {
     const t = audioManager.state.currentTrack;
-    if (t) navigate(renderAudio, t.id);
+    if (t?.source === "apple-preview") navigate(renderPreviewPlayer, t.id);
+    else if (t) navigate(renderAudio, t.id);
     else toast("Choisissez un fichier audio");
   });
-  on("[data-album-play]", () => toast("Audio à venir"));
+  on("[data-album-play]", () => playKairos());
   on("[data-shuffle]", (b) => {
     audioManager.state.shuffle = !audioManager.state.shuffle;
     b.setAttribute("aria-pressed", String(audioManager.state.shuffle));
+    if (state.currentApp === "music") {
+      playKairos();
+      return;
+    }
     const tracks = audioManager.available();
     if (tracks.length)
       audioManager.play(tracks[Math.floor(Math.random() * tracks.length)]);
@@ -1861,7 +1908,7 @@ function trackEvent(name, data = {}) {
     name === "app_opened" && apps.includes(data.app)
       ? { app: data.app }
       : name === "instagram_dm_opened" &&
-          ["emmanuella", "angiste", "corentin", "redka"].includes(data.thread)
+          Object.hasOwn(IG_CONTACTS, data.thread)
         ? { thread: data.thread }
         : {};
   window.dispatchEvent(
@@ -1968,7 +2015,7 @@ function updatePhoneSignals() {
   }
   updateInstagramBadge();
   const old = $("#lockCallNotification");
-  if (state.callHistory) {
+  if (state.callHistory && state.phoneUnlocked) {
     const notification = old || document.createElement("button");
     notification.id = "lockCallNotification";
     notification.className = "lock-notif";
@@ -2082,6 +2129,33 @@ function route(name) {
 }
 
 /* BOOT + POINTER GESTURES: coordinates are relative to the phone, including on desktop. */
+function returnToLock() {
+  transitionMedia(null);
+  state.lockCameraActive = false;
+  state.currentApp = null;
+  state.currentView = null;
+  state.navigationStack = [];
+  appContent.innerHTML = "";
+  setStatus(true);
+  show(lock);
+}
+function openLockCamera() {
+  if (state.phoneUnlocked) return route("camera");
+  state.lockCameraActive = true;
+  state.currentApp = "camera";
+  state.navigationStack = [];
+  state.currentView = { renderer: renderCamera, args: [] };
+  renderCamera();
+  const thumbnail = $("[data-camera-gallery]");
+  if (thumbnail) thumbnail.onclick = returnToLock;
+}
+$("#lockFlashlight").innerHTML = icon("flashlight");
+$("#lockCamera").innerHTML = icon("camera");
+$("#lockFlashlight").onclick = () => {
+  state.flashlightOn = !state.flashlightOn;
+  $("#lockFlashlight").setAttribute("aria-pressed", String(state.flashlightOn));
+};
+$("#lockCamera").onclick = openLockCamera;
 // V8 starts on the live lockscreen; activation is still explicit at unlock.
 setStatus(true);
 show(lock);

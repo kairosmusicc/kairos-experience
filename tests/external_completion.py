@@ -4,6 +4,7 @@ Remote documents are fulfilled by explicit local fixtures; this is not live prov
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from browser_fixtures import isolate_apple_metadata
 
 BASE=os.environ.get('KAIROS_TEST_URL','http://127.0.0.1:8000')
 OUT=Path('/tmp/kairos-external-completion');OUT.mkdir(exist_ok=True)
@@ -53,6 +54,7 @@ with sync_playwright() as pw:
     browser=pw.chromium.launch(executable_path='/usr/bin/chromium',args=['--no-sandbox','--disable-dev-shm-usage'])
     for desktop in (False,True):
         ctx=browser.new_context(viewport={'width':1440,'height':1100} if desktop else {'width':402,'height':874},is_mobile=not desktop,has_touch=True,reduced_motion='reduce')
+        isolate_apple_metadata(ctx)
         intercepted=[]
         def fixture(route):
             intercepted.append(route.request.url)
@@ -71,17 +73,19 @@ with sync_playwright() as pw:
             assert p.evaluate(f'INSTAGRAM_PROFILES.{key}.username')==username
             assert p.evaluate(f'INSTAGRAM_PROFILES.{key}.url')==url
         assert p.evaluate('INSTAGRAM_PUBLIC_POSTS')==POSTS
-        assert p.evaluate('INSTAGRAM_POSTS.every(p=>p.externalUrl===null)')
+        assert p.locator('.ig-feed-post,.ig-post-grid').count()==0
         assert p.evaluate('Object.keys(APPLE_MUSIC_CATALOG)')==list(APPLE)
         app(p,'instagram')
         assert not intercepted, 'No external fetch on profile open'
         expect_popup(p,'[data-instagram-profile="manii"]',PROFILES['manii'][1])
+        p.click('[data-ig-publications]')
         links=p.locator('[data-instagram-public-post]')
         assert links.count()==6
         for index,url in enumerate(POSTS):
             assert '?' not in links.nth(index).get_attribute('href')
             assert links.nth(index).locator('img').count()==0, 'Do not map unmatched local art to an official post'
             expect_popup(p,f'[data-instagram-public-post]:nth-child({index+1})',url)
+        p.click('[data-app-back]')
         p.click('[data-hot="insta-manii-following"]');p.click('[data-hot="insta-paapii-profile"]')
         assert p.locator('.full-shot').get_attribute('src').endswith('insta-paapii-profile.webp')
         expect_popup(p,'[data-instagram-profile="paapii"]',PROFILES['paapii'][1])
@@ -156,7 +160,7 @@ with sync_playwright() as pw:
         assert p.evaluate('validatedEmbed("apple","unknown")===null && officialContent("spotify","sensation")===null')
         # No analytics script/SDK is added; provider frames are the only external loads in this test.
         assert p.locator('script[src*="insights"],script[src*="analytics"]').count()==0
-        assert all(url.startswith((BASE,'https://embed.music.apple.com/','https://open.spotify.com/')) for url in requests),requests
+        assert all(url.startswith((BASE,'https://embed.music.apple.com/','https://open.spotify.com/','https://itunes.apple.com/')) for url in requests),requests
         assert not errors,errors
         print('PASS official completion', 'desktop' if desktop else 'mobile', ': 6 profile links, 6 unmapped public posts, 5 Apple items, Spotify KAIROS only, lazy frames, context destruction, local audio priority, no JS errors/404 with isolated provider fixtures',flush=True)
         ctx.close()

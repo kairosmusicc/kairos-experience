@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 from playwright.sync_api import sync_playwright
+from browser_fixtures import isolate_apple_metadata
 
 BASE=os.environ.get('KAIROS_TEST_URL','http://127.0.0.1:8000')
 ROOT=Path(__file__).resolve().parents[1]
@@ -10,12 +11,11 @@ OUT=Path('/tmp/kairos-v8-screenshots');OUT.mkdir(exist_ok=True)
 BASELINE='d3ac4554c4ae6021bb339b94079d7b04150d307c'
 old=subprocess.check_output(['git','show',BASELINE+':app.js'],cwd=ROOT,text=True)
 new=(ROOT/'app.js').read_text()
-assert old[old.index('if (navigator.getBattery)'):old.index('\nfunction icon(')]==new[new.index('if (navigator.getBattery)'):new.index('\nfunction icon(')]
-old_html=subprocess.check_output(['git','show',BASELINE+':index.html'],cwd=ROOT,text=True)
+assert 'if (navigator.getBattery)' in new
 html=(ROOT/'index.html').read_text()
-assert old_html[old_html.index('<div id="statusBar"'):old_html.index('<div class="dynamic-island"')]==html[html.index('<div id="statusBar"'):html.index('<div class="dynamic-island"')]
+assert '<span id="batteryLevel">76</span>' not in html
 assert '#intro' not in new and 'enterBtn' not in html
-print('PASS V8: V7 battery logic and status bar markup unchanged',flush=True)
+print('PASS V8: honest battery fallback and no intro',flush=True)
 
 
 def app(p,name):p.locator(f'#home [data-route="{name}"]').first.click()
@@ -37,6 +37,7 @@ with sync_playwright() as pw:
     browser=pw.chromium.launch(executable_path='/usr/bin/chromium',args=['--no-sandbox','--disable-dev-shm-usage'])
     for desktop in (False,True):
         ctx=browser.new_context(viewport={'width':1440,'height':1100} if desktop else {'width':402,'height':874},is_mobile=not desktop,has_touch=True,reduced_motion='reduce')
+        isolate_apple_metadata(ctx)
         p=ctx.new_page();errors=[];requests=[]
         p.on('pageerror',lambda e:errors.append(str(e)))
         p.on('console',lambda m:errors.append(m.text) if m.type=='error' else None)
@@ -56,8 +57,7 @@ with sync_playwright() as pw:
         app(p,'instagram');assert p.locator('.full-shot').get_attribute('src').endswith('insta-manii-profile.webp')
         for hotspot in ['insta-manii-following','insta-paapii-profile','insta-paapii-following','insta-manii-profile']:
             p.click('[data-hot="'+hotspot+'"]')
-        p.click('[data-ig-post="kairos"]');assert p.locator('.ig-full-post').get_attribute('src').endswith('kairos-cover.jpg')
-        p.click('[data-ig-like]');assert p.locator('[data-ig-like]').get_attribute('aria-pressed')=='true'
+        p.click('[data-ig-publications]');assert p.locator('[data-instagram-public-post]').count()==6
         p.click('[data-app-back]');p.click('[data-ig-view="inbox"]')
         assert 'manii_mu' in p.locator('.ig-username').inner_text()
         assert p.locator('#igInboxSearch').get_attribute('placeholder')=='Recherchez ou demandez à Meta AI'
@@ -132,7 +132,7 @@ with sync_playwright() as pw:
         assert 'j’ai laissé le lien final dans Safari' in p.locator('#igThreadMessages').inner_text()
         assert p.evaluate('state.finalAlbumMessageRead')
         home(p);p.clock.fast_forward(5000);assert not p.locator('#storyNotification').is_visible()
-        app(p,'safari');assert p.locator('.safari-album').count()==1
+        app(p,'safari');p.click('[data-safari-page="album"]');assert p.locator('.safari-album').count()==1
         assert p.locator('.safari-album img').get_attribute('src')=='assets/images/kairos-cover.jpg'
         p.click('[data-safari-tabs]');assert p.locator('[data-safari-page="album"]').count()==1
         p.click('[data-safari-page="album"]');p.click('[data-safari-reload]')
@@ -156,8 +156,8 @@ with sync_playwright() as pw:
         assert p.locator('[data-ig-thread="corentin"] .ig-unread').count()==0
         p.click('[data-ig-thread="emmanuella"]');assert p.locator('.ig-message-line').count()==178
         assert not errors,errors
-        assert all(url.startswith(BASE) for url in requests),requests
-        assert p.evaluate('INSTAGRAM_POSTS.every(p=>p.externalUrl===null)')
+        assert all(url.startswith((BASE,'https://itunes.apple.com/')) for url in requests),requests
+        assert p.locator('.ig-feed-post,.ig-post-grid').count()==0
         print('PASS V8', 'desktop' if desktop else 'mobile', ': inbox, Notes touch, four DMs, long scroll, read persistence, posts, tabs, finale→Corentin→Safari, explicit album opening, no JS errors/404/external requests',flush=True)
         ctx.close()
     browser.close()

@@ -6,6 +6,14 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
+    <script>
+      // Apply native iOS chrome before first paint to avoid a duplicate simulated status bar.
+      if (
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
+      )
+        document.documentElement.classList.add("ios-native-chrome");
+    </script>
     <meta name="theme-color" content="#000000" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta
@@ -44,8 +52,8 @@
                   />
                 </svg>
                 <span class="battery-pill"
-                  ><span id="batteryLevel">76</span></span
-                >
+                  ><span id="batteryLevel"></span
+                ></span>
               </span>
             </div>
             <div class="dynamic-island"></div>
@@ -55,30 +63,21 @@
               <div class="lock-center">
                 <div id="lockDate" class="lock-date"></div>
                 <div id="lockTime" class="lock-time"></div>
-                <div class="lock-copy">
-                  Tu as trouvé le téléphone de KAIROS.
-                </div>
               </div>
-              <div class="lock-notifications">
-                <button class="lock-notif" data-route="messages">
-                  <img src="assets/icons/messages.png" alt="" />
-                  <div>
-                    <b>Messages</b><small>maintenant</small
-                    ><strong>Paapii</strong>
-                    <p>frérot t’as gardé le fichier ?</p>
-                  </div>
-                </button>
-                <button class="lock-notif" data-route="whatsapp">
-                  <img src="assets/icons/whatsapp.png" alt="" />
-                  <div>
-                    <b>WhatsApp</b><small>2 min</small><strong>Paapii</strong>
-                    <p>j’ai retrouvé un truc</p>
-                  </div>
-                </button>
+              <div class="lock-notifications"></div>
+              <div class="lock-shortcuts">
+                <button
+                  id="lockFlashlight"
+                  aria-label="Lampe torche"
+                  aria-pressed="false"
+                ></button
+                ><button id="lockCamera" aria-label="Appareil photo"></button>
               </div>
-              <button id="unlockBtn" class="unlock">
-                Balayer vers le haut pour ouvrir
-              </button>
+              <button
+                id="unlockBtn"
+                class="unlock"
+                aria-label="Déverrouiller"
+              ></button>
             </section>
 
             <section id="home" class="view home-view">
@@ -187,6 +186,7 @@
     </main>
     <script src="instagram-data.js" defer></script>
     <script src="external-content.js" defer></script>
+    <script src="apple-metadata.js" defer></script>
     <script src="v8.js" defer></script>
     <script src="app.js" defer></script>
   </body>

@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from browser_fixtures import isolate_apple_metadata
 
 BASE=os.environ.get('KAIROS_TEST_URL','http://127.0.0.1:8000')
 OUT=Path('/tmp/kairos-microfix-screenshots');OUT.mkdir(exist_ok=True)
@@ -9,6 +10,8 @@ OUT=Path('/tmp/kairos-microfix-screenshots');OUT.mkdir(exist_ok=True)
 
 def boot(browser, desktop=False, permission=True):
     c=browser.new_context(viewport={'width':1440,'height':1100} if desktop else {'width':402,'height':874},is_mobile=not desktop,has_touch=True,reduced_motion='reduce',permissions=['camera'] if permission else [])
+    isolate_apple_metadata(c)
+    isolate_apple_metadata(c)
     page=c.new_page();errors=[]
     page.on('pageerror',lambda e:errors.append(str(e)))
     page.on('console',lambda m:errors.append(m.text) if m.type=='error' else None)

@@ -3,6 +3,7 @@ import json
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from browser_fixtures import isolate_apple_metadata
 
 BASE = os.environ.get('KAIROS_TEST_URL', 'http://127.0.0.1:8000')
 OUT = Path('/tmp/kairos-rc-screenshots')
@@ -11,6 +12,7 @@ OUT.mkdir(exist_ok=True)
 
 def boot(browser, desktop=False, clock=True):
     ctx = browser.new_context(viewport={'width': 1440, 'height': 1100} if desktop else {'width': 402, 'height': 874}, is_mobile=not desktop, has_touch=True, reduced_motion='reduce')
+    isolate_apple_metadata(ctx)
     page = ctx.new_page()
     errors, failures, console = [], [], []
     page.on('pageerror', lambda e: errors.append(str(e)))
@@ -97,7 +99,7 @@ with sync_playwright() as p:
         assert page.locator('.album-header img').get_attribute('src')=='assets/images/kairos-cover.jpg'
         assert page.locator('[data-track^="album-"]').count()==8
         assert page.evaluate('ALBUM_TRACKS.every(t=>t.src===null && t.artwork===KAIROS_COVER)')
-        page.click('[data-track="album-0"]');assert page.locator('#toast').inner_text()=='Audio indisponible'
+        page.click('[data-track="album-0"]');assert page.locator('#toast').inner_text()=='Aperçu indisponible'
         page.click('[data-track="abeg"]');page.wait_for_function('!audioManager.audio.paused')
         current=page.evaluate('audioManager.audio.currentTime')
         page.click('[data-app-back]');assert page.evaluate('!audioManager.audio.paused')

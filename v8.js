@@ -1,31 +1,23 @@
 /* V8 extensions. Official profiles and players are configured in external-content.js. */
-const INSTAGRAM_POSTS = [
-  {
-    id: "kairos",
-    image: "assets/images/kairos-cover.jpg",
-    caption: "KAIROS · 29.10.26",
-    externalUrl: null,
-  },
-  {
-    id: "manii",
-    image: "assets/images/manii-01.jpg",
-    caption: "Manii",
-    externalUrl: null,
-  },
-  {
-    id: "duo",
-    image: "assets/images/duo-01.jpg",
-    caption: "Manii & Paapii",
-    externalUrl: null,
-  },
-  {
-    id: "paapii",
-    image: "assets/images/paapii-01.jpg",
-    caption: "Paapii",
-    externalUrl: null,
-  },
-];
 const IG_CONTACTS = {
+  ruben: {
+    name: "Ruben cutz 💈",
+    username: "Ruben cutz 💈",
+    preview: "En ligne",
+    time: "",
+  },
+  ange: {
+    name: "Ange Attéméné",
+    username: "Ange Attéméné",
+    preview: "A aimé un message",
+    time: "21 h",
+  },
+  himra: {
+    name: "himra_saiyen",
+    username: "himra_saiyen",
+    preview: "Envoyé",
+    time: "",
+  },
   emmanuella: {
     name: "emmanuella",
     username: INSTAGRAM_PROFILES.emmanuella.username,
@@ -62,7 +54,7 @@ function igVerified() {
 }
 function igUnreadCount() {
   return (
-    1 +
+    (state.read.has("ig-ange") ? 0 : 1) +
     (state.instagramEmmanuellaRead ? 0 : 1) +
     (state.finalAlbumMessageAvailable && !state.finalAlbumMessageRead ? 1 : 0)
   );
@@ -128,14 +120,15 @@ function renderInstagram(view = "manii-profile") {
       `<div class="ig-profile-official"><b>${INSTAGRAM_PROFILES[owner].username}</b>${instagramProfileLink(owner, "Ouvrir sur Instagram")}</div>`,
     );
   }
-  if (view.endsWith("-profile")) {
-    const grid = document.createElement("div");
-    grid.className = "ig-profile-posts";
-    grid.innerHTML = `<div class="ig-posts-title">${icon("grid")} Publications</div><div class="ig-post-grid">${INSTAGRAM_POSTS.map((p) => `<button data-ig-post="${p.id}" aria-label="Ouvrir ${p.caption}"><img src="${p.image}" alt="${p.caption}" loading="lazy" decoding="async"></button>`).join("")}</div>`;
-    scroll.append(grid);
-    if (view === "manii-profile")
-      scroll.insertAdjacentHTML("beforeend", instagramPublicPosts());
-  }
+  if (view === "manii-profile")
+    scroll.insertAdjacentHTML(
+      "beforeend",
+      '<button class="ig-publications-entry" data-ig-publications>' +
+        icon("grid") +
+        " Publications " +
+        icon("back") +
+        "</button>",
+    );
   shell.append(scroll);
   shell.insertAdjacentHTML("beforeend", igBottomNav("manii-profile"));
   appContent.replaceChildren(shell);
@@ -180,9 +173,15 @@ function renderInstagramInbox() {
     ),
     igInboxRow("ruben", "Ruben cutz 💈", "En ligne", "", { online: true }),
     igInboxRow("angiste", "Angiste", "En ligne il y a 57 minutes", ""),
-    igInboxRow("ange", "Ange Attéméné", "A aimé un message", "21 h", {
-      unread: true,
-    }),
+    igInboxRow(
+      "ange",
+      "Ange Attéméné",
+      state.read.has("ig-ange") ? "Vu" : "A aimé un message",
+      "21 h",
+      {
+        unread: !state.read.has("ig-ange"),
+      },
+    ),
     igInboxRow(
       "corentin",
       "Corentin",
@@ -261,30 +260,34 @@ function instagramMessages(id) {
     .concat(state.instagramReplies[id] || [])
     .map((m) => ({ ...m, dateGroup: igDateGroup(m.timestamp) }));
 }
-function igMessageHTML(m) {
+function igMessageHTML(m, id, groupEnd = false) {
   let body =
-    m.type === "image"
-      ? `<button class="ig-image-message" data-ig-image="${m.image}" aria-label="Ouvrir la photo"><img src="${m.image}" alt="Photo partagée" width="180" height="180" loading="lazy"></button>`
-      : m.text === ALBUM_URL
-        ? `<button class="ig-shared-link" data-safari-album>${icon("globe")}<b>KAIROS — Manii & Paapii</b><span>album.link</span></button>`
-        : escapeHTML(m.text);
+    m.type === "mention"
+      ? `<span class="ig-mention-card">${icon("message")}<span>${escapeHTML(m.text)}</span></span>`
+      : m.type === "sharedPost" &&
+          MANII_REAL_INSTAGRAM_CONTENT.includes(m.externalUrl)
+        ? `<a class="ig-shared-post" href="${m.externalUrl}" target="_blank" rel="noopener noreferrer">${icon("reels")} Publication Instagram</a>`
+        : m.type === "image"
+          ? `<button class="ig-image-message" data-ig-image="${m.image}" aria-label="Ouvrir la photo"><img src="${m.image}" alt="Photo partagée" width="180" height="180" loading="lazy"></button>`
+          : m.text === ALBUM_URL
+            ? `<button class="ig-shared-link" data-safari-album>${icon("globe")}<b>KAIROS — Manii & Paapii</b><span>album.link</span></button>`
+            : escapeHTML(m.text);
   const reaction = Object.hasOwn(state.instagramReactions, m.id)
     ? state.instagramReactions[m.id]
     : m.reaction?.emoji;
-  return `<div class="ig-message-line ${m.sender === "me" ? "me" : "them"}" data-message-id="${m.id}" data-read="${m.read}"><div class="ig-message-bubble ${m.type === "image" ? "is-image" : ""}" data-ig-react="${m.id}" title="Double-cliquer pour réagir">${body}</div>${reaction ? `<span class="ig-reaction" aria-label="Réaction ${reaction}">${escapeHTML(reaction)}</span>` : ""}<time>${new Date(m.timestamp).toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</time></div>`;
+  return `<div class="ig-message-line ${m.sender === "me" ? "me" : "them"} ${groupEnd ? "group-end" : ""}" data-message-id="${m.id}" data-read="${m.read}">${m.sender === "them" && groupEnd ? igAvatar(IG_CONTACTS[id].name, INSTAGRAM_AVATARS[id], "ig-group-avatar") : ""}<div class="ig-message-bubble ${m.type === "image" ? "is-image" : ""}" data-ig-react="${m.id}">${body}</div>${reaction ? `<span class="ig-reaction" aria-label="Réaction ${reaction}">${escapeHTML(reaction)}</span>` : ""}</div>`;
 }
 function renderInstagramThread(id, updateOnly = false) {
   const c = IG_CONTACTS[id];
   if (!c) return;
+  state.read.add("ig-" + id);
   if (id === "emmanuella") state.instagramEmmanuellaRead = true;
-  else
-    state[
-      {
-        angiste: "instagramAngisteOpened",
-        corentin: "instagramCorentinOpened",
-        redka: "instagramRedkaOpened",
-      }[id]
-    ] = true;
+  const flag = {
+    angiste: "instagramAngisteOpened",
+    corentin: "instagramCorentinOpened",
+    redka: "instagramRedkaOpened",
+  }[id];
+  if (flag) state[flag] = true;
   if (id === "corentin" && state.finalAlbumMessageAvailable)
     state.finalAlbumMessageRead = true;
   persistProgress();
@@ -293,19 +296,32 @@ function renderInstagramThread(id, updateOnly = false) {
     trackEvent("instagram_dm_opened", { thread: id });
     trackEvent(id + "_opened");
   }
-  let group = "";
-  const messages = instagramMessages(id)
-    .map((m) => {
-      const separator =
-        m.dateGroup !== group
-          ? `<div class="ig-date-separator">${escapeHTML(m.dateGroup)}</div>`
-          : "";
-      group = m.dateGroup;
-      return separator + igMessageHTML(m);
+  let lastTime = 0;
+  const rows = instagramMessages(id);
+  const messages = rows
+    .map((m, i) => {
+      const boundary =
+        !lastTime ||
+        m.timestamp - lastTime > 30 * 60000 ||
+        new Date(m.timestamp).toDateString() !==
+          new Date(lastTime).toDateString();
+      const date = new Date(m.timestamp);
+      const separator = boundary
+        ? `<div class="ig-date-separator">${date.toLocaleDateString("fr-FR", { weekday: "short" }).toUpperCase()} ${date.toLocaleTimeString("fr-FR", { hour: "2-digit", minute: "2-digit" })}</div>`
+        : "";
+      lastTime = m.timestamp;
+      const next = rows[i + 1],
+        groupEnd =
+          !next ||
+          next.sender !== m.sender ||
+          next.timestamp - m.timestamp > 30 * 60000 ||
+          new Date(next.timestamp).toDateString() !==
+            new Date(m.timestamp).toDateString();
+      return separator + igMessageHTML(m, id, groupEnd);
     })
     .join("");
   openApp(
-    `<section class="ig-app ig-thread"><header class="ig-thread-header"><button class="back" data-app-back aria-label="Retour à la boîte Instagram">${icon("back")}</button>${igAvatar(c.name, INSTAGRAM_AVATARS[id])}<div><b>${c.name}</b><small>${id === "angiste" ? "En ligne il y a 57 minutes" : c.username}</small></div>${iconButton("phone", "Appeler " + c.name, "data-contact-call")}${iconButton("video", "Appel vidéo " + c.name, "data-contact-call")}</header><div class="ig-thread-messages" id="igThreadMessages"><div class="ig-contact-card">${igAvatar(c.name, INSTAGRAM_AVATARS[id])}<b>${c.name}</b><span>${c.username} · Instagram</span>${instagramProfileLink(id, "Voir le profil")}</div>${messages}<span class="ig-delivered">Vu</span></div><form class="ig-composer" data-ig-reply="${id}">${iconButton("camera", "Photos de ce téléphone", "data-ig-photos")}<input name="message" placeholder="Envoyer un message…" aria-label="Message à ${c.name}" maxlength="500" autocomplete="off"><button type="submit" aria-label="Envoyer">${icon("send")}</button></form></section>`,
+    `<section class="ig-app ig-thread"><header class="ig-thread-header"><button class="back" data-app-back aria-label="Retour à la boîte Instagram">${icon("back")}</button>${igAvatar(c.name, INSTAGRAM_AVATARS[id])}<div><b>${c.name}</b><small>${id === "ruben" ? "En ligne" : id === "angiste" ? "En ligne il y a 57 minutes" : c.username}</small></div>${iconButton("phone", "Appeler " + c.name, "data-contact-call")}${iconButton("video", "Appel vidéo " + c.name, "data-contact-call")}</header><div class="ig-thread-messages" id="igThreadMessages"><div class="ig-contact-card">${igAvatar(c.name, INSTAGRAM_AVATARS[id])}<b>${c.name}</b><span>${c.username} · Instagram</span>${instagramProfileLink(id, "Voir le profil")}</div>${messages}<span class="ig-delivered">${id === "himra" ? "Envoyé" : "Vu"}</span></div><form class="ig-composer" data-ig-reply="${id}">${iconButton("camera", "Photos de ce téléphone", "data-ig-photos")}<input name="message" placeholder="Votre message..." aria-label="Message à ${c.name}" maxlength="500" autocomplete="off"><span class="ig-composer-tools">${iconButton("mic", "Message audio", "data-ig-mic")}${iconButton("gallery", "Galerie", "data-ig-photos")}${iconButton("sticker", "Stickers", "data-ig-sticker")}${iconButton("plus", "Plus", "data-ig-more")}</span><button type="submit" class="hidden" aria-label="Envoyer">${icon("send")}</button></form></section>`,
   );
   requestAnimationFrame(() => {
     if (
@@ -318,15 +334,16 @@ function renderInstagramThread(id, updateOnly = false) {
   });
 }
 function renderIGFeed() {
-  openApp(
-    `<section class="ig-app ig-feed"><header class="ig-feed-header"><b>Instagram</b><div>${iconButton("heart", "Activité Instagram", "data-ig-activity")}${iconButton("message", "Messages Instagram", 'data-ig-view="inbox"')}</div></header><div class="ig-scroll">${INSTAGRAM_POSTS.map((p) => `<article class="ig-feed-post"><header>${igAvatar("Manii", "assets/images/manii-01.jpg")}<b>${INSTAGRAM_PROFILES.manii.username} ${igVerified()}</b>${iconButton("ellipsis", "Options de la publication", "data-ig-options")}</header><button data-ig-post="${p.id}" aria-label="Ouvrir ${p.caption}"><img src="${p.image}" alt="${p.caption}" loading="lazy" decoding="async"></button><p>${p.caption}</p></article>`).join("")}</div>${igBottomNav("home")}</section>`,
-  );
+  renderInstagram("manii-profile");
+  $$("[data-ig-view]", appContent).forEach((b) => {
+    b.classList.toggle("selected", b.dataset.igView === "home");
+    if (b.dataset.igView === "home") b.setAttribute("aria-current", "page");
+    else b.removeAttribute("aria-current");
+  });
 }
-function renderIGPost(id) {
-  const p = INSTAGRAM_POSTS.find((p) => p.id === id);
-  if (!p) return;
+function renderIGPublications() {
   openApp(
-    `<section class="ig-app ig-post-detail">${nav("Publication", "•••")}<div class="ig-scroll"><div class="ig-feed-header">${igAvatar("Manii", "assets/images/manii-01.jpg")}<b>${INSTAGRAM_PROFILES.manii.username} ${igVerified()}</b></div><img class="ig-full-post" src="${p.image}" alt="${p.caption}"><div class="ig-post-actions">${iconButton("heart", "Aimer la publication", `data-ig-like="${p.id}" aria-pressed="false"`)}${iconButton("share", "Partager la publication", "data-share")}</div><p><b>${INSTAGRAM_PROFILES.manii.username}</b> ${p.caption}</p>${p.externalUrl ? `<a href="${p.externalUrl}" target="_blank" rel="noopener noreferrer">Ouvrir sur Instagram</a>` : ""}</div></section>`,
+    `<section class="ig-app">${nav("Publications")}<div class="ig-scroll">${instagramPublicPosts()}</div></section>`,
   );
 }
 function renderIGSearch() {
@@ -335,9 +352,7 @@ function renderIGSearch() {
       IG_CONTACTS,
     )
       .map(([id, c]) => igInboxRow(id, c.name, c.username, ""))
-      .join(
-        "",
-      )}</div><div class="ig-post-grid">${INSTAGRAM_POSTS.map((p) => `<button data-ig-post="${p.id}" aria-label="Ouvrir ${p.caption}"><img src="${p.image}" alt="${p.caption}" loading="lazy"></button>`).join("")}</div></div>${igBottomNav("search")}</section>`,
+      .join("")}</div></div>${igBottomNav("search")}</section>`,
   );
 }
 function renderIGReels() {
@@ -420,7 +435,6 @@ function scheduleAlbumMessage() {
       return;
     state.finalAlbumMessageAvailable = true;
     state.finalAlbumMessageAt = Date.now();
-    state.safariKairosAvailable = true;
     persistProgress();
     updateInstagramBadge();
     trackEvent("final_album_message_shown");
@@ -464,11 +478,7 @@ function safariAlbumPage() {
   return `<article class="safari-album"><small>album.link</small><img src="${KAIROS_COVER}" alt="Cover officielle de KAIROS" width="260" height="260"><h1>KAIROS</h1><p>Manii & Paapii</p><button class="safari-listen" data-album-listen>Écouter ${icon("next")}</button><span>Choisissez votre plateforme.</span></article>`;
 }
 function renderSafari(page) {
-  page =
-    page ||
-    (state.safariKairosAvailable
-      ? "album"
-      : state.safariHistory.at(-1) || "start");
+  page = page || state.safariHistory.at(-1) || "start";
   if (page === "album" && !state.safariKairosAvailable) page = "start";
   const content =
     page === "album"
@@ -511,7 +521,7 @@ function appleRecentlyPlayed() {
   )
     .map(
       ([key, c]) =>
-        `<button class="apple-recent-item ${key === "kairos" ? "kairos-priority" : ""}" data-apple-content="${key}">${key === "kairos" ? `<img src="${KAIROS_COVER}" alt="Cover KAIROS" width="52" height="52">` : `<span class="apple-art-neutral">${icon("music")}</span>`}<span><b>${c.title}</b><small>${c.artist || "Morceau · Apple Music"}</small></span>${icon("play")}</button>`,
+        `<button class="apple-recent-item ${key === "kairos" ? "kairos-priority" : ""}" data-apple-content="${key}">${appleArtworkHTML(key)}<span><b data-apple-title="${key}">${c.title}</b><small data-apple-artist="${key}">${c.artist || "Morceau · Apple Music"}</small></span>${icon("play")}</button>`,
     )
     .join("")}</div></section>`;
 }
@@ -550,6 +560,7 @@ function stopOfficialEmbeds() {
   $$("[data-official-frame]").forEach((frame) => frame.remove());
 }
 function renderOfficialEmbed(provider, key = "kairos") {
+  if (provider === "apple") loadAppleCatalogMetadata();
   const content = officialContent(provider, key),
     src = validatedEmbed(provider, key);
   if (!content || !src) return;
@@ -564,10 +575,16 @@ function renderOfficialEmbed(provider, key = "kairos") {
     : SPOTIFY_KAIROS.url;
   trackEvent(apple ? "apple_music_embed_opened" : "spotify_embed_started");
   openApp(
-    `<div class="official-player ${apple ? "music-app apple-official-player" : "spotify-app"}">${nav(apple ? "Musique" : "Spotify")}<header class="official-player-title"><h1>${content.title}</h1>${content.artist ? `<p>${content.artist}</p>` : ""}</header><iframe data-official-frame data-provider="${provider}" src="${escapeHTML(src)}" title="${content.title} — ${apple ? "Apple Music" : "Spotify"}" loading="lazy" allow="${apple ? "autoplay *; encrypted-media *;" : "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"}" ${apple ? 'sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"' : ""} frameborder="0" style="width:100%;height:${height}px;overflow:hidden;background:transparent;"></iframe><div class="official-player-fallback"><p data-embed-status role="status" class="hidden">Lecteur indisponible</p><a href="${officialURL}" target="_blank" rel="noopener noreferrer" data-official-fallback>Ouvrir dans ${apple ? "Apple Music" : "Spotify"}</a><button data-embed-retry data-provider="${provider}" data-content="${key}">Recharger le lecteur</button></div></div>`,
+    `<div class="official-player ${apple ? "music-app apple-official-player" : "spotify-app"}">${nav(apple ? "Musique" : "Spotify")}<header class="official-player-title">${apple ? appleArtworkHTML(key, "official-artwork") : ""}<h1 ${apple ? `data-apple-title="${key}"` : ""}>${content.title}</h1>${apple ? `<p data-apple-artist="${key}">${content.artist || ""}</p>` : content.artist ? `<p>${content.artist}</p>` : ""}</header><div class="official-loading" data-official-loading><span class="player-skeleton"></span>Chargement du lecteur…</div><iframe class="official-frame-pending" data-official-frame data-provider="${provider}" src="${escapeHTML(src)}" title="${content.title} — ${apple ? "Apple Music" : "Spotify"}" loading="lazy" allow="${apple ? "autoplay *; encrypted-media *;" : "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"}" ${apple ? 'sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"' : ""} frameborder="0" style="width:100%;height:${height}px;overflow:hidden;background:transparent;"></iframe><div class="official-player-fallback"><p data-embed-status role="status" class="hidden">Lecteur indisponible</p><a href="${officialURL}" target="_blank" rel="noopener noreferrer" data-official-fallback>Ouvrir dans ${apple ? "Apple Music" : "Spotify"}</a><button data-embed-retry data-provider="${provider}" data-content="${key}">Recharger le lecteur</button></div></div>`,
     { dark: !apple },
   );
   const frame = $("[data-official-frame]");
+  frame.onload = () => {
+    if (frame.isConnected) {
+      frame.classList.remove("official-frame-pending");
+      $("[data-official-loading]")?.classList.add("hidden");
+    }
+  };
   frame.onerror = () => {
     if (frame.isConnected && $("[data-official-frame]") === frame)
       $("[data-embed-status]")?.classList.remove("hidden");
@@ -645,7 +662,7 @@ function bindV8Controls() {
   on("[data-ig-activity]", () =>
     showSheet("Activité", "Ange Attéméné a aimé un message."),
   );
-  on("[data-ig-post]", (b) => navigate(renderIGPost, b.dataset.igPost));
+  on("[data-ig-publications]", () => navigate(renderIGPublications));
   on("[data-ig-image]", (b) => navigate(renderIGImage, b.dataset.igImage));
   on("[data-ig-like]", (b) => {
     const active = b.getAttribute("aria-pressed") !== "true";
@@ -653,6 +670,37 @@ function bindV8Controls() {
     b.classList.toggle("liked", active);
   });
   on("[data-ig-photos]", () => navigate(renderPhotos));
+  on("[data-ig-mic]", () =>
+    showSheet("Message audio", "Le micro de ce téléphone est indisponible."),
+  );
+  on("[data-ig-sticker]", () =>
+    showSheet("Réactions", "", [
+      {
+        label: "❤️",
+        run: () => {
+          const input = $(".ig-composer input");
+          input.value += "❤️";
+          input.dispatchEvent(new Event("input"));
+          input.focus();
+        },
+      },
+      {
+        label: "😂",
+        run: () => {
+          const input = $(".ig-composer input");
+          input.value += "😂";
+          input.dispatchEvent(new Event("input"));
+          input.focus();
+        },
+      },
+    ]),
+  );
+  on("[data-ig-more]", () =>
+    showSheet("Joindre", "", [
+      { label: "Photos", run: () => navigate(renderPhotos) },
+      { label: "Fichiers", run: () => navigate(renderFiles) },
+    ]),
+  );
   on("[data-ig-reel]", async (b) => {
     const v = $("#igReelVideo");
     if (v.paused) {
@@ -701,6 +749,14 @@ function bindV8Controls() {
     $$("button", form).forEach((b) => {
       if (!b.hasAttribute("type")) b.type = "button";
     });
+    const composerInput = $("input", form),
+      send = $('[type="submit"]', form),
+      tools = $(".ig-composer-tools", form);
+    composerInput.oninput = () => {
+      const filled = !!composerInput.value.trim();
+      send.classList.toggle("hidden", !filled);
+      tools.classList.toggle("hidden", filled);
+    };
     form.onsubmit = (e) => {
       e.preventDefault();
       const field = $("input", form),
@@ -766,15 +822,14 @@ function bindV8Controls() {
   on("[data-official-embed]", (b) =>
     navigate(renderOfficialEmbed, b.dataset.officialEmbed, "kairos"),
   );
+  on("[data-apple-refresh]", () => loadAppleCatalogMetadata({ refresh: true }));
   on("[data-apple-content]", (b) =>
     navigate(renderOfficialEmbed, "apple", b.dataset.appleContent),
   );
   on(".spotify-app [data-album-play]", () =>
     navigate(renderOfficialEmbed, "spotify", "kairos"),
   );
-  on(".music-app [data-album-play]", () =>
-    navigate(renderOfficialEmbed, "apple", "kairos"),
-  );
+  on(".music-app [data-album-play]", () => playKairos());
   on("[data-official-fallback]", stopOfficialEmbeds);
   on("[data-embed-retry]", (b) =>
     renderOfficialEmbed(b.dataset.provider, b.dataset.content),
