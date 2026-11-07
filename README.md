@@ -70,3 +70,29 @@ Un premier refus du numéro inconnu programme un rappel à +60 secondes. L’éc
 `transitionMedia` centralise les sorties de contexte et appelle `AudioManager.stop()` (pause, remise à zéro et synchronisation UI). Un fichier ABEG/Tout gâcher quitte son contexte au retour précédent, au Home et à l’ouverture d’un autre contenu. Musique/Spotify peuvent garder la lecture entre leurs propres écrans internes ; quitter l’app l’arrête. Un appel entrant arrête les autres médias avant son audio. Le mini-player, la file, le seek et les contrôles restent disponibles pour un redémarrage explicite.
 
 `tests/micro_fix.py` utilise une caméra virtuelle Chromium réelle pour les tracks et un navigateur avec permissions refusées pour le fallback. Il couvre aussi les permissions tardives, les sorties par gestes, le bouton +, les arrière-plans, les rappels acceptés/refusés, leur persistance après refresh, leur report pendant FaceTime et les sorties audio. Il complète les suites V7 existantes. La caméra frontale et les permissions sur iPhone/Safari physiques restent à valider sur la preview HTTPS.
+
+## V8 expérimentale — `v8-immersive`
+
+La V8 part du `main` stable `d3ac4554c4ae6021bb339b94079d7b04150d307c`. Elle ouvre directement le lockscreen ; l’intro et son bouton ont été retirés. Le code `navigator.getBattery()`, son fallback et le markup de la status bar sont inchangés. Les styles V8 sont isolés dans `v8.css`.
+
+`instagram-data.js` contient les conversations **fictionnelles fournies pour l’expérience**, structurées par message : 177 messages Emmanuella, 81 Angiste, 48 Corentin et 41 Redka, avec dates, expéditeurs, états lus, image et réactions. Les threads ne sont rendus qu’à l’ouverture. Les quatre avatars fournis restent à leurs chemins exacts, sans sous-dossier Instagram ; les contacts secondaires sans photo ont des initiales neutres. Aucun vrai message privé n’est connecté.
+
+`v8.js` ajoute l’inbox, les Notes horizontales, les filtres, la recherche, les threads, les réponses de session, les réactions et la navigation Instagram. Les quatre captures de profils et leurs hotspots sont conservés ; une grille ouvre les images du projet en détail. Les publications sont configurées dans `INSTAGRAM_POSTS` avec `externalUrl: null`, faute d’URLs publiques exactes dans le dépôt. Les images représentent les contenus fournis ; aucun lien vers un post Instagram n’est inventé. L’inbox suit les spécifications textuelles, aucune capture d’inbox supplémentaire n’étant présente dans le dépôt.
+
+Après consultation de la note finale « 02:43 », un retour Home de 3,5 secondes peut délivrer une notification Instagram unique de Corentin. Elle ajoute ses cinq messages finaux et rend l’album disponible dans Safari. Cette étape est différée pendant un appel et ne force aucune redirection. Les états lus, les réponses/réactions et les étapes finales persistent dans la progression de session existante.
+
+Safari est maintenant interne : barre d’adresse, précédent/suivant, rechargement de la vue, historique local et présentation des onglets. Seule la page enregistrée KAIROS est rendue localement ; il ne s’agit pas d’un proxy ou d’un navigateur web généraliste. Le bouton « Écouter » ouvre volontairement le vrai lien `album.link`. Les liens officiels dans les DMs et les entrées Musique/Spotify conduisent à cette même page Safari.
+
+`KAIROS_SPOTIFY_EMBED` et `KAIROS_APPLE_MUSIC_EMBED` restent **null** : aucun identifiant officiel n’est présent dans le dépôt, et la consultation de `album.link` est refusée par le réseau de l’environnement. Le point d’intégration valide les origines officielles, ne crée l’iframe qu’après clic et la supprime lors d’une sortie ou d’un appel. Pour le moment, les deux apps gardent leur UI et offrent l’entrée vers l’album officiel ; les fichiers récupérés restent locaux et utilisent le même AudioManager.
+
+L’abstraction `trackEvent` est étendue avec les étapes V8. Elle émet des événements locaux avec une allowlist des noms d’apps et des identifiants de threads. Aucun texte de message, nom saisi, identifiant personnel ou contenu média n’est transmis. Vercel Analytics n’est pas activé dans le projet à partir de cette branche ; aucun SDK, OAuth, MusicKit ni compte développeur n’est ajouté.
+
+Validation complémentaire :
+
+```sh
+node --check v8.js
+node --check instagram-data.js
+python3 tests/v8_immersive.py
+```
+
+Cette suite vérifie les invariants de batterie/status bar contre la baseline Git, le démarrage direct, le scroll tactile horizontal/vertical, les quatre conversations, les réactions/états lus, la persistance, la navigation, les publications, la finale puis Corentin/Safari, l’ouverture externe volontaire et l’absence d’erreurs JavaScript/404. Captures : `/tmp/kairos-v8-screenshots`. Les suites V7 sont conservées, avec seulement l’adaptation du boot sans intro et de Safari interne. WebKit n’est pas installé dans l’environnement ; la recette Safari/iPhone physique reste nécessaire avant toute promotion. `main` et la Production ne doivent pas être modifiés sans validation explicite.

@@ -6,7 +6,7 @@ import sys
 
 ROOT = Path(__file__).resolve().parents[1]
 refs = set()
-for name in ('index.html', 'styles.css', 'app.js'):
+for name in ('index.html', 'styles.css', 'app.js', 'v8.css', 'v8.js', 'instagram-data.js'):
     refs.update(re.findall(r'''assets/[\w./-]+\.(?:png|jpg|webp|wav|mp4)''', (ROOT / name).read_text()))
 missing = sorted(ref for ref in refs if not (ROOT / ref).is_file())
 manifest = json.loads((ROOT / 'manifest.webmanifest').read_text())

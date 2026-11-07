@@ -13,7 +13,6 @@ OUT.mkdir(exist_ok=True)
 
 def boot(page):
     page.goto(BASE, wait_until='networkidle')
-    page.click('#enterBtn')
     assert page.locator('#lock.active-view').count() == 1
 
 
@@ -161,7 +160,11 @@ with sync_playwright() as p:
         # Intercept external navigation: verify target without requiring album.link network access.
         page.evaluate('window.open=(url)=>{window.__openedURL=url}')
         app(page, 'safari')
+        page.fill('[data-safari-address] input', 'KAIROS')
+        page.locator('[data-safari-address]').evaluate('(f)=>f.requestSubmit()')
+        page.click('[data-album-listen]')
         assert page.evaluate('window.__openedURL') == 'https://album.link/qzsdrsh5r3m8j'
+        home(page)
         app(page, 'phone')
         assert page.locator('[data-call-accept]').is_visible()
         assert page.locator('#statusBar').evaluate('el=>getComputedStyle(el).zIndex') == '101'
@@ -182,7 +185,7 @@ with sync_playwright() as p:
         assert 'Numéro inconnu' in page.locator('.phone-app').inner_text()
         # Session persistence survives reload.
         page.reload(wait_until='networkidle')
-        page.click('#enterBtn'); page.click('#unlockBtn'); app(page, 'files'); page.click('[data-file="abeg"]')
+        page.click('#unlockBtn'); app(page, 'files'); page.click('[data-file="abeg"]')
         assert page.locator('.audio-player').count() == 1
         assert not errors, errors
         assert not failures, failures

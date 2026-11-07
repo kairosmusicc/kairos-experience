@@ -20,7 +20,7 @@ def boot(browser, desktop=False, permission=True):
         window.__cameraCalls.push(c);const stream=await nativeGet(c);window.__streams.push(stream);return stream;
       };''')
     page.goto(BASE,wait_until='networkidle');page.clock.install()
-    page.click('#enterBtn');page.click('#unlockBtn')
+    page.click('#unlockBtn')
     return c,page,errors
 
 
@@ -139,11 +139,11 @@ with sync_playwright() as pw:
         clean(errors);c.close();print('PASS micro-fix: recall after navigation, second '+('accepted' if answer else 'declined')+', no third call',flush=True)
     # Pending recall survives refresh through the same session state, without extra attempts.
     c,p,errors=boot(b);app(p,'phone');p.click('[data-call-decline]');due=p.evaluate('state.recallDueAt')
-    p.reload(wait_until='networkidle');p.click('#enterBtn');p.click('#unlockBtn')
+    p.reload(wait_until='networkidle');p.click('#unlockBtn')
     assert p.evaluate('state.recallDueAt')==due
     fast_until(p,'state.recallDueAt');assert p.locator('[data-call-accept]').is_visible()
     assert p.evaluate('state.unknownCallAttempts')==2
-    p.click('[data-call-decline]');p.reload(wait_until='networkidle');p.click('#enterBtn');p.click('#unlockBtn');p.clock.fast_forward(180000)
+    p.click('[data-call-decline]');p.reload(wait_until='networkidle');p.click('#unlockBtn');p.clock.fast_forward(180000)
     assert p.locator('[data-call-accept]').count()==0
     clean(errors);c.close();print('PASS micro-fix: recall persistence across refresh, no third attempt after refresh',flush=True)
     # Hidden-page cleanup stops live tracks and requires a fresh explicit retry.

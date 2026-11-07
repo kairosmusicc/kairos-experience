@@ -19,7 +19,7 @@ def boot(browser, desktop=False, clock=True):
     page.goto(BASE, wait_until='networkidle')
     if clock:
         page.clock.install()
-    page.click('#enterBtn'); page.click('#unlockBtn')
+    page.click('#unlockBtn')
     return ctx, page, (errors, failures, console)
 
 
@@ -117,7 +117,7 @@ with sync_playwright() as p:
         home(page);app(page,'calendar');assert page.locator('#calendarAgenda').inner_text().find('Studio — Zénithal')>=0
         home(page);app(page,'settings');page.click('[data-setting-detail="Général"]');assert '128 Go' in page.locator('.settings-app').inner_text()
         home(page);app(page,'facetime');assert 'Appel vidéo manqué' in page.locator('.facetime-app').inner_text()
-        page.reload(wait_until='networkidle');page.click('#enterBtn');page.click('#unlockBtn');page.clock.fast_forward(3000)
+        page.reload(wait_until='networkidle');page.click('#unlockBtn');page.clock.fast_forward(3000)
         assert not page.locator('#storyNotification').is_visible()
         assert page.evaluate('state.finalSequenceTriggered && state.finalNoteOpened && state.callHandled')
         app(page,'notes');assert page.locator('[data-note="final-0243"]').count()==1
