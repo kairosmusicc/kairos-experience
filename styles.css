@@ -1859,7 +1859,9 @@ svg.ui {
   text-align: right;
   color: #8e8e93;
   font-size: 10px;
-  margin-top: 6px;
+  margin: 2px 4px 5px auto;
+  padding-right: 2px;
+  width: max-content;
 }
 .imessage-compose,
 .wa-input {
@@ -3514,4 +3516,13 @@ svg.ui {
 }
 .app-view:has(.facetime-preview) {
   background: #17191b;
+}
+
+/* Lock gesture feedback affects content only; wallpaper and device geometry stay fixed. */
+.lock-view .lock-center, .lock-view .lock-shortcuts, .lock-view .unlock {
+  translate: 0 var(--lock-swipe-y, 0px);
+  transition: translate .12s ease-out;
+}
+.lock-view.lock-dragging .lock-center, .lock-view.lock-dragging .lock-shortcuts, .lock-view.lock-dragging .unlock {
+  transition: none;
 }

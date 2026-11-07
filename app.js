@@ -99,6 +99,7 @@ function navigate(renderer, ...args) {
   renderer(...args);
 }
 function unlockPhone() {
+  resetLockSwipe();
   state.lockCameraActive = false;
   systemSounds.enable();
   warmAppleMusic();
@@ -141,16 +142,23 @@ const IMessageThreads = {
   paapii: {
     name: "Paapii",
     avatar: "assets/images/paapii-01.jpg",
-    preview: "retourne-la.",
+    preview: "lis-la pas comme un français.",
     offset: 7,
     messages: [
       ["them", "t’as gardé le bounce d’abeg ?"],
       ["me", "ouais dans Fichiers"],
-      ["them", "le code c’est tjrs le même ?"],
-      ["me", "j’ai oublié mdrr"],
-      ["them", "la date du projet"],
-      ["me", "29/10 ?"],
-      ["them", "retourne-la."],
+      ["me", "par contre j’ai verrouillé le truc et j’ai oublié le code 😭"],
+      ["them", "mdrrrr t’es sérieux"],
+      ["me", "rappelle-moi"],
+      ["them", "non cherche un peu"],
+      ["me", "frère 😭"],
+      ["them", "c’est lié au projet"],
+      ["me", "ça m’aide de fou merci"],
+      ["them", "la date"],
+      ["me", "29/10"],
+      ["them", "voilà"],
+      ["me", "et donc ?"],
+      ["them", "lis-la pas comme un français."],
     ],
   },
   corentin: {
@@ -497,14 +505,15 @@ function renderMessageThread(id) {
   if (id === "paapii") state.paapiiMessageRead = true;
   persistProgress();
   updatePhoneSignals();
-  const msgs = threadMessages("im", id, t.messages)
-    .map(
-      (m) =>
-        `<div class="bubble-line ${m[0] === "me" ? "me" : "them"}"><div class="bubble">${escapeHTML(m[1])}</div></div>`,
+  const messages = threadMessages("im", id, t.messages),
+    lastSentIndex = messages.map(m => m[0]).lastIndexOf("me");
+  const msgs = messages.map(
+      (m, i) =>
+        `<div class="bubble-line ${m[0] === "me" ? "me" : "them"}"><div class="bubble">${escapeHTML(m[1])}</div></div>${i === lastSentIndex ? '<div class="delivery-label">Distribué</div>' : ""}`,
     )
     .join("");
   openApp(
-    `<div class="thread-wrap"><div class="thread-head"><button class="back" data-app-back aria-label="Retour aux messages">${icon("back")}</button><div class="thread-person">${avatarHTML(t.avatar, t.name)}<b>${t.name}</b></div><div class="thread-tools">${iconButton("video", "Appeler en vidéo", "data-contact-call")}${iconButton("phone", "Appeler", "data-contact-call")}</div></div><div class="bubble-area"><div class="time-label">Aujourd’hui ${timeHTML(t.offset + t.messages.length)}</div>${msgs}<div class="delivery-label">Distribué</div></div>${composer("im", id)}</div>`,
+    `<div class="thread-wrap"><div class="thread-head"><button class="back" data-app-back aria-label="Retour aux messages">${icon("back")}</button><div class="thread-person">${avatarHTML(t.avatar, t.name)}<b>${t.name}</b></div><div class="thread-tools">${iconButton("video", "Appeler en vidéo", "data-contact-call")}${iconButton("phone", "Appeler", "data-contact-call")}</div></div><div class="bubble-area"><div class="time-label">Aujourd’hui ${timeHTML(t.offset + t.messages.length)}</div>${msgs}</div>${composer("im", id)}</div>`,
   );
 }
 
@@ -2181,15 +2190,17 @@ syncMobileExperience();
 // V8 starts on the live lockscreen; activation is still explicit at unlock.
 setStatus(true);
 show(lock);
-$("#unlockBtn").onclick = unlockPhone;
 $("#homeIndicator").onclick = () => {
-  if (lock.classList.contains("active-view")) unlockPhone();
-  else goHome();
+  if (!lock.classList.contains("active-view")) goHome();
 };
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-route]");
   if (b) route(b.dataset.route);
 });
+function resetLockSwipe() {
+  lock.classList.remove("lock-dragging");
+  lock.style.removeProperty("--lock-swipe-y");
+}
 let gesture = null,
   suppressClick = false;
 screen.addEventListener("pointerdown", (e) => {
@@ -2216,10 +2227,19 @@ screen.addEventListener("pointerdown", (e) => {
     lock: lock.classList.contains("active-view"),
     photo: !!$("#photoViewer.open"),
   };
-  if (gesture.lock) (e.target.closest("button") || screen).setPointerCapture(e.pointerId);
+  if (gesture.lock) {
+    lock.classList.add("lock-dragging");
+    (e.target.closest("button") || screen).setPointerCapture(e.pointerId);
+  }
 });
 screen.addEventListener("pointermove", (e) => {
-  if (!gesture || gesture.id !== e.pointerId || gesture.lock) return;
+  if (!gesture || gesture.id !== e.pointerId) return;
+  if (gesture.lock) {
+    const rawDy = e.clientY - gesture.y, rawDx = e.clientX - gesture.x;
+    const progress = rawDy < 0 && Math.abs(rawDy) > Math.abs(rawDx) * .65 ? Math.min(-rawDy / 80, 1) : 0;
+    lock.style.setProperty("--lock-swipe-y", `${-progress * 28}px`);
+    return;
+  }
   const dx = (e.clientX - gesture.x) * gesture.ratio,
     dy = (e.clientY - gesture.y) * gesture.ratio;
   if (
@@ -2236,10 +2256,11 @@ screen.addEventListener("pointerup", (e) => {
     dy = (e.clientY - g.y) * g.ratio;
   let handled = false;
   if (g.lock) {
+    resetLockSwipe();
     const rawDy = e.clientY - g.y, rawDx = e.clientX - g.x,
       duration = performance.now() - g.startTime;
-    if ((rawDy < -32 && Math.abs(rawDy) > Math.abs(rawDx) * .8) ||
-        (rawDy < -18 && duration < 350 && Math.abs(rawDy) > Math.abs(rawDx) * .7)) {
+    if ((rawDy <= -28 && Math.abs(rawDy) > Math.abs(rawDx) * .75) ||
+        (rawDy <= -16 && duration <= 300 && Math.abs(rawDy) > Math.abs(rawDx) * .65)) {
       unlockPhone();
       handled = true;
     }
@@ -2262,7 +2283,7 @@ screen.addEventListener("pointerup", (e) => {
     setTimeout(() => (suppressClick = false), 350);
   }
 });
-screen.addEventListener("pointercancel", () => (gesture = null));
+screen.addEventListener("pointercancel", () => { gesture = null; resetLockSwipe(); });
 screen.addEventListener(
   "click",
   (e) => {
