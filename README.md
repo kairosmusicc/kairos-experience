@@ -83,7 +83,7 @@ Après consultation de la note finale « 02:43 », un retour Home de 3,5 seconde
 
 Safari est maintenant interne : barre d’adresse, précédent/suivant, rechargement de la vue, historique local et présentation des onglets. Seule la page enregistrée KAIROS est rendue localement ; il ne s’agit pas d’un proxy ou d’un navigateur web généraliste. Le bouton « Écouter » ouvre volontairement le vrai lien `album.link`. Les liens officiels dans les DMs et les entrées Musique/Spotify conduisent à cette même page Safari.
 
-`KAIROS_SPOTIFY_EMBED` et `KAIROS_APPLE_MUSIC_EMBED` restent **null** : aucun identifiant officiel n’est présent dans le dépôt, et la consultation de `album.link` est refusée par le réseau de l’environnement. Le point d’intégration valide les origines officielles, ne crée l’iframe qu’après clic et la supprime lors d’une sortie ou d’un appel. Pour le moment, les deux apps gardent leur UI et offrent l’entrée vers l’album officiel ; les fichiers récupérés restent locaux et utilisent le même AudioManager.
+Les URLs officielles sont désormais configurées dans `external-content.js` : Spotify propose uniquement KAIROS, et Apple Music les cinq contenus explicitement fournis (KAIROS, Sensation, Shogun in Lagos, Kany, Hatelove). Le point d’intégration valide les origines et les clés du catalogue, ne crée l’iframe qu’après clic et la détruit lors d’une sortie ou d’un appel. Les fichiers récupérés restent locaux et utilisent le même AudioManager. Le CTA final Safari conserve `album.link`.
 
 L’abstraction `trackEvent` est étendue avec les étapes V8. Elle émet des événements locaux avec une allowlist des noms d’apps et des identifiants de threads. Aucun texte de message, nom saisi, identifiant personnel ou contenu média n’est transmis. Vercel Analytics n’est pas activé dans le projet à partir de cette branche ; aucun SDK, OAuth, MusicKit ni compte développeur n’est ajouté.
 
@@ -96,3 +96,22 @@ python3 tests/v8_immersive.py
 ```
 
 Cette suite vérifie les invariants de batterie/status bar contre la baseline Git, le démarrage direct, le scroll tactile horizontal/vertical, les quatre conversations, les réactions/états lus, la persistance, la navigation, les publications, la finale puis Corentin/Safari, l’ouverture externe volontaire et l’absence d’erreurs JavaScript/404. Captures : `/tmp/kairos-v8-screenshots`. Les suites V7 sont conservées, avec seulement l’adaptation du boot sans intro et de Safari interne. WebKit n’est pas installé dans l’environnement ; la recette Safari/iPhone physique reste nécessaire avant toute promotion. `main` et la Production ne doivent pas être modifiés sans validation explicite.
+
+## Complétion des contenus officiels V8
+
+`INSTAGRAM_PROFILES` centralise les six handles et URLs fournis : `manii_musicoff`, `angiste3`, `paapii_levrai`, `honey_emmanuella`, `_co.ko__`, `prodbyredka`. Les headers HTML utilisent le handle complet ; seule la CSS peut tronquer l’affichage. Les captures historiques Paapii sont conservées et accompagnées du lien `paapii_levrai`. La contact card Angiste pointe directement vers `angiste3`, sans basculer vers le profil artiste Paapii. Les quatre contact cards des DMs proposent « Voir le profil » après clic, avec `target="_blank"` et `rel="noopener noreferrer"`.
+
+`INSTAGRAM_PUBLIC_POSTS` conserve les six URLs publiques fournies, sans paramètres de tracking. Une section « Sur Instagram » du profil Manii les ouvre volontairement. Aucune correspondance certaine n’est disponible entre ces six URLs et les images locales `kairos-cover.jpg`, `manii-01.jpg`, `duo-01.jpg`, `paapii-01.jpg`. Les quatre cartes locales restent donc à `externalUrl: null`, séparées des liens publics ; aucune mauvaise photo n’est attribuée à un post officiel.
+
+Musique garde sa bibliothèque et ses fichiers récupérés. Une section « Écoutés récemment » ouvre chacun des cinq contenus Apple en vue interne avec titre, artiste si fourni, retour et iframe officielle (450 px pour les albums, 150 px pour Kany). La cover KAIROS est conservée ; aucun artwork non fourni n’est inventé pour les autres albums. Les permissions `allow` et `sandbox` de l’iframe Apple suivent la configuration demandée. Spotify garde son shell, sa cover et sa tracklist : la cover, le titre et Play ouvrent uniquement le lecteur officiel KAIROS. Les paramètres optionnels de partage `utm_source`/`si` de l’embed Spotify sont omis ; l’album ID fourni reste identique.
+
+L’ouverture d’un lecteur arrête l’audio local et détruit tout lecteur externe précédent. Retour bibliothèque, Home, swipe Home, autre app, appel entrant, page masquée ou quittée détruisent l’iframe ; un lien de secours volontaire vers la plateforme et une action Recharger restent disponibles. L’AudioManager ne cherche jamais à contrôler une lecture cross-origin. Le fallback Spotify pointe sur l’URL officielle `open.spotify.com/intl-fr/album/6nyjz8T3h6paStfVUerOMi`.
+
+Aucun script ni SDK Analytics n’est ajouté. L’abstraction locale `trackEvent` reste en place, sans envoi d’événements réseau. Ni OAuth, ni token, ni MusicKit/compte développeur ne sont utilisés.
+
+```sh
+node --check external-content.js
+python3 tests/external_completion.py
+```
+
+La suite teste les six profils et six URLs exactes, les clics volontaires et attributs de sécurité, les cinq contenus Apple, le seul catalogue Spotify, le lazy loading, les tailles et permissions des frames, leur destruction réelle, le fallback et la priorité audio locale. Les réponses des fournisseurs sont **remplacées par des fixtures locales explicites pour isoler la navigation et le lifecycle**. Les captures dans `/tmp/kairos-external-completion` ne représentent donc pas le rendu réel des lecteurs Apple/Spotify. Les requêtes réelles vers Instagram, Apple et Spotify sont refusées par le proxy réseau de l’environnement (`403 Forbidden`) : disponibilité publique et lecture réelle restent à vérifier sur une preview HTTPS avec accès aux fournisseurs. Les URL sont celles fournies, sans recherche d’identifiants supplémentaires.

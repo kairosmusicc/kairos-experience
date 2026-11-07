@@ -145,10 +145,9 @@ with sync_playwright() as pw:
         home(p)
         for name in ['music','spotify']:
             app(p,name)
-            assert p.locator('[data-safari-album]').count()>0
-            assert p.evaluate('KAIROS_SPOTIFY_EMBED===null && KAIROS_APPLE_MUSIC_EMBED===null')
+            assert p.locator('[data-official-embed]').count()>0
+            assert p.evaluate('!!validatedEmbed("spotify") && !!validatedEmbed("apple")')
             assert p.locator('iframe').count()==0
-            p.click('[data-safari-album]');assert p.locator('.safari-album').count()==1
             home(p)
         p.reload(wait_until='networkidle');assert p.locator('#lock.active-view').count()==1
         assert p.locator('#intro').count()==0

@@ -1175,3 +1175,210 @@
   width: 44px;
   min-width: 44px;
 }
+/* Completion: official identities/links and lazy players, without replacing the V8 surfaces. */
+.ig-username {
+  min-width: 0;
+  max-width: calc(100% - 90px);
+}
+.ig-username-text {
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ig-username .ig-verified,
+.ig-username .ig-down {
+  flex-shrink: 0;
+}
+.ig-profile-link {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 9px 15px;
+  border-radius: 10px;
+  background: #f3f3f4;
+  color: #111;
+  font-size: 12px;
+  text-decoration: none;
+}
+.ig-profile-official {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 12px 15px;
+  border-top: 1px solid #eee;
+  font-size: 13px;
+}
+.ig-public-posts {
+  padding: 22px 15px 25px;
+}
+.ig-public-posts h2 {
+  font-size: 18px;
+  margin: 0 0 14px;
+  letter-spacing: -0.3px;
+}
+.ig-public-posts > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+.ig-public-posts a {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  min-height: 78px;
+  padding: 12px 10px;
+  border: 1px solid #eee;
+  border-radius: 13px;
+  color: #111;
+  text-decoration: none;
+  background: #fafafa;
+}
+.ig-public-posts a > span {
+  min-width: 0;
+  flex: 1;
+}
+.ig-public-posts b {
+  display: block;
+  font-size: 12px;
+  font-weight: 600;
+}
+.ig-public-posts small {
+  display: block;
+  font-size: 9px;
+  color: #888;
+  margin-top: 5px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.ig-public-posts .ui {
+  height: 20px;
+  width: 20px;
+}
+.ig-public-posts a > .ui:last-child {
+  height: 12px;
+  width: 12px;
+  color: #aaa;
+}
+.apple-recent > div {
+  margin: 0 20px;
+  border: 1px solid #efeff2;
+  border-radius: 14px;
+  overflow: hidden;
+}
+.apple-recent-item {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  border: 0;
+  border-bottom: 1px solid #eee;
+  background: #fff;
+  text-align: left;
+  min-height: 76px;
+}
+.apple-recent-item:last-child {
+  border-bottom: 0;
+}
+.apple-recent-item > img,
+.apple-art-neutral {
+  width: 52px;
+  height: 52px;
+  object-fit: cover;
+  border-radius: 8px;
+  flex-shrink: 0;
+}
+.apple-art-neutral {
+  display: grid;
+  place-items: center;
+  background: #f4f3f5;
+  color: #aaa;
+}
+.apple-recent-item > span:not(.apple-art-neutral) {
+  min-width: 0;
+  flex: 1;
+}
+.apple-recent-item b {
+  font-size: 15px;
+  display: block;
+}
+.apple-recent-item small {
+  display: block;
+  margin-top: 4px;
+  color: #888;
+  font-size: 12px;
+}
+.apple-recent-item > .ui {
+  color: #f43e57;
+  width: 18px;
+  height: 18px;
+}
+.apple-recent-item.kairos-priority {
+  background: #fdf9fa;
+}
+.spotify-cover-button {
+  display: block;
+  margin: auto;
+  border: 0;
+  background: none;
+  padding: 0;
+}
+.spotify-title-button {
+  font: inherit;
+  color: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  text-align: left;
+}
+.official-player.music-app {
+  padding-bottom: calc(var(--bottom-space) + 20px);
+}
+.official-player-title {
+  padding: 12px 20px 22px;
+}
+.official-player-title h1 {
+  font-size: 26px;
+  letter-spacing: -0.5px;
+  margin: 0 0 7px;
+}
+.official-player-title p {
+  margin: 0;
+  color: #999;
+  font-size: 16px;
+}
+.official-player-fallback {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 11px;
+  font-size: 13px;
+}
+.official-player-fallback > a {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 44px;
+  padding: 10px 17px;
+  border-radius: 13px;
+  background: #f2f2f7;
+  color: #007aff;
+  text-decoration: none;
+}
+.official-player-fallback > button {
+  min-height: 44px;
+  background: none;
+  border: 0;
+  color: #888;
+  font-size: 12px;
+  padding: 10px;
+}
+.official-player.spotify-app .official-player-fallback > a {
+  background: #ffffff15;
+  color: #1ed760;
+}
