@@ -5,6 +5,7 @@ Run: python3 tests/smoke.py
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from browser_fixtures import isolate_apple_metadata
 
 BASE = os.environ.get('KAIROS_TEST_URL', 'http://127.0.0.1:8000')
 OUT = Path('/tmp/kairos-v7-screenshots')
@@ -13,7 +14,6 @@ OUT.mkdir(exist_ok=True)
 
 def boot(page):
     page.goto(BASE, wait_until='networkidle')
-    page.click('#enterBtn')
     assert page.locator('#lock.active-view').count() == 1
 
 
@@ -52,6 +52,7 @@ with sync_playwright() as p:
     browser = p.chromium.launch(executable_path='/usr/bin/chromium', args=['--no-sandbox', '--disable-dev-shm-usage'])
     for label, viewport, mobile in [('mobile', {'width': 402, 'height': 874}, True), ('desktop', {'width': 1440, 'height': 1100}, False)]:
         context = browser.new_context(viewport=viewport, is_mobile=mobile, has_touch=True, reduced_motion='reduce')
+        isolate_apple_metadata(context)
         page = context.new_page()
         errors, failures = [], []
         page.on('pageerror', lambda e: errors.append(str(e)))
@@ -118,8 +119,8 @@ with sync_playwright() as p:
         app(page, 'music')
         page.click('[data-music-album]')
         assert page.locator('[data-track^="album-"]').count() == 8
-        page.click('[data-track="album-0"]', force=True)
-        assert page.locator('#toast').inner_text() == 'Audio indisponible'
+        assert page.locator('[data-track="album-0"]').is_disabled()
+        assert page.locator('[data-album-play]').is_disabled()
         page.click('[data-track="tout"]')
         page.wait_for_function('audioManager.state.currentTrack.id==="tout" && !audioManager.audio.paused')
         page.screenshot(path=str(OUT / f'{label}-music.png'))
@@ -161,7 +162,11 @@ with sync_playwright() as p:
         # Intercept external navigation: verify target without requiring album.link network access.
         page.evaluate('window.open=(url)=>{window.__openedURL=url}')
         app(page, 'safari')
+        page.fill('[data-safari-address] input', 'KAIROS')
+        page.locator('[data-safari-address]').evaluate('(f)=>f.requestSubmit()')
+        page.click('[data-album-listen]')
         assert page.evaluate('window.__openedURL') == 'https://album.link/qzsdrsh5r3m8j'
+        home(page)
         app(page, 'phone')
         assert page.locator('[data-call-accept]').is_visible()
         assert page.locator('#statusBar').evaluate('el=>getComputedStyle(el).zIndex') == '101'
@@ -182,7 +187,7 @@ with sync_playwright() as p:
         assert 'Numéro inconnu' in page.locator('.phone-app').inner_text()
         # Session persistence survives reload.
         page.reload(wait_until='networkidle')
-        page.click('#enterBtn'); page.click('#unlockBtn'); app(page, 'files'); page.click('[data-file="abeg"]')
+        page.click('#unlockBtn'); app(page, 'files'); page.click('[data-file="abeg"]')
         assert page.locator('.audio-player').count() == 1
         assert not errors, errors
         assert not failures, failures
@@ -190,6 +195,7 @@ with sync_playwright() as p:
         context.close()
     # Fresh sessions for automatic incoming call, natural ending and decline.
     context = browser.new_context(viewport={'width': 402, 'height': 874}, is_mobile=True, has_touch=True, reduced_motion='reduce')
+    isolate_apple_metadata(context)
     page = context.new_page(); boot(page)
     page.clock.install()
     page.click('#unlockBtn')
@@ -201,6 +207,7 @@ with sync_playwright() as p:
     assert page.locator('#modal.hidden').count() == 1
     context.close()
     context = browser.new_context(viewport={'width': 402, 'height': 874}, is_mobile=True)
+    isolate_apple_metadata(context)
     page = context.new_page(); boot(page);page.click('#unlockBtn');app(page,'phone');page.click('[data-call-accept]')
     page.wait_for_function('document.querySelector("#callAudio").readyState>=1')
     page.evaluate('document.querySelector("#callAudio").currentTime=document.querySelector("#callAudio").duration-0.15')

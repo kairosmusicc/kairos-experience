@@ -1,7 +1,6 @@
 const $ = (s, r = document) => r.querySelector(s);
 const $$ = (s, r = document) => [...r.querySelectorAll(s)];
-const intro = $("#intro"),
-  phoneScene = $("#phoneScene"),
+const phoneScene = $("#phoneScene"),
   lock = $("#lock"),
   home = $("#home"),
   appView = $("#appView"),
@@ -36,6 +35,8 @@ function storedJSON(key, fallback) {
 const savedProgress = storedJSON("kairos.progress", {});
 const state = {
   phoneUnlocked: false,
+  lockCameraActive: false,
+  flashlightOn: false,
   currentApp: null,
   currentView: null,
   navigationStack: [],
@@ -69,6 +70,23 @@ const state = {
   read: new Set(savedProgress.read || []),
   photoIndex: 0,
   musicState: null,
+  instagramEpoch: savedProgress.instagramEpoch || Date.now(),
+  instagramEmmanuellaRead: !!savedProgress.instagramEmmanuellaRead,
+  instagramAngisteOpened: !!savedProgress.instagramAngisteOpened,
+  instagramCorentinOpened: !!savedProgress.instagramCorentinOpened,
+  instagramRedkaOpened: !!savedProgress.instagramRedkaOpened,
+  finalAlbumMessageAvailable: !!savedProgress.finalAlbumMessageAvailable,
+  finalAlbumMessageRead: !!savedProgress.finalAlbumMessageRead,
+  finalAlbumMessageAt: savedProgress.finalAlbumMessageAt || 0,
+  safariKairosAvailable: true,
+  albumLinkClicked: !!savedProgress.albumLinkClicked,
+  instagramReplies: savedProgress.instagramReplies || {},
+  instagramReactions: savedProgress.instagramReactions || {},
+  safariHistory: Array.isArray(savedProgress.safariHistory)
+    ? savedProgress.safariHistory
+        .filter((x) => ["start", "album"].includes(x))
+        .slice(-20)
+    : ["start"],
 };
 let callTimer = null,
   callStartedAt = 0,
@@ -81,6 +99,10 @@ function navigate(renderer, ...args) {
   renderer(...args);
 }
 function unlockPhone() {
+  resetLockSwipe();
+  state.lockCameraActive = false;
+  systemSounds.enable();
+  warmAppleMusic();
   if (!state.phoneUnlocked) trackEvent("phone_unlocked");
   state.phoneUnlocked = true;
   if (!state.firstUnlockedAt) state.firstUnlockedAt = Date.now();
@@ -96,7 +118,7 @@ const ALBUM_URL = "https://album.link/qzsdrsh5r3m8j";
 const AUDIO = {
   abeg: "assets/audio/abeg.wav",
   tout: "assets/audio/tout_gacher.wav",
-  call: "assets/audio/call-0243.wav",
+  call: "assets/audio/Nouvel-enregistrement-215.wav",
 };
 const GALLERY = [
   "assets/images/manii-01.jpg",
@@ -120,16 +142,23 @@ const IMessageThreads = {
   paapii: {
     name: "Paapii",
     avatar: "assets/images/paapii-01.jpg",
-    preview: "retourne-la.",
+    preview: "lis-la pas comme un français.",
     offset: 7,
     messages: [
       ["them", "t’as gardé le bounce d’abeg ?"],
       ["me", "ouais dans Fichiers"],
-      ["them", "le code c’est tjrs le même ?"],
-      ["me", "j’ai oublié mdrr"],
-      ["them", "la date du projet"],
-      ["me", "29/10 ?"],
-      ["them", "retourne-la."],
+      ["me", "par contre j’ai verrouillé le truc et j’ai oublié le code 😭"],
+      ["them", "mdrrrr t’es sérieux"],
+      ["me", "rappelle-moi"],
+      ["them", "non cherche un peu"],
+      ["me", "frère 😭"],
+      ["them", "c’est lié au projet"],
+      ["me", "ça m’aide de fou merci"],
+      ["them", "la date"],
+      ["me", "29/10"],
+      ["them", "voilà"],
+      ["me", "et donc ?"],
+      ["them", "lis-la pas comme un français."],
     ],
   },
   corentin: {
@@ -277,12 +306,17 @@ function syncClock() {
 }
 syncClock();
 setInterval(syncClock, 10000);
+// Mobile browsers use the real system chrome; unknown batteries have no invented number.
+$(".battery-pill").classList.add("battery-unknown");
 if (navigator.getBattery) {
   navigator
     .getBattery()
     .then((b) => {
-      const update = () =>
-        ($("#batteryLevel").textContent = Math.round(b.level * 100));
+      const update = () => {
+        if (!Number.isFinite(b.level) || b.level < 0 || b.level > 1) return;
+        $("#batteryLevel").textContent = Math.round(b.level * 100);
+        $(".battery-pill").classList.remove("battery-unknown");
+      };
       update();
       b.addEventListener("levelchange", update);
     })
@@ -291,6 +325,24 @@ if (navigator.getBattery) {
 
 function icon(name) {
   const paths = {
+    igHome: '<path d="m3 10 9-7 9 7v11h-6v-7H9v7H3z"/>',
+    reels:
+      '<rect x="3" y="4" width="18" height="17" rx="4"/><path d="M3 9h18M8 4l3 5m3-5 3 5m-7 4 5 3-5 3z"/>',
+    message: '<path d="m22 2-7 20-4-9-9-4zM22 2 11 13"/>',
+    heart:
+      '<path d="M20 4c-3-2-6 0-8 2-2-2-5-4-8-2-5 4 0 10 8 16 8-6 13-12 8-16z"/>',
+    grid: '<path d="M3 3h18v18H3zM9 3v18M15 3v18M3 9h18M3 15h18"/>',
+    sliders:
+      '<path d="M4 6h16M4 12h16M4 18h16"/><circle cx="8" cy="6" r="2" fill="white"/><circle cx="16" cy="12" r="2" fill="white"/><circle cx="10" cy="18" r="2" fill="white"/>',
+    reload: '<path d="M20 10a8 8 0 1 0-1 8M20 4v6h-6"/>',
+    tabs: '<rect x="7" y="3" width="14" height="14" rx="3"/><path d="M17 17v3a1 1 0 0 1-1 1H4a1 1 0 0 1-1-1V8a1 1 0 0 1 1-1h3"/>',
+    globe:
+      '<circle cx="12" cy="12" r="9"/><path d="M3 12h18M12 3c-6 6-6 12 0 18 6-6 6-12 0-18z"/>',
+    flashlight: '<path d="M6 3h12v4l-3 4v10H9V11L6 7zM6 7h12M12 14v3"/>',
+    gallery:
+      '<rect x="3" y="3" width="18" height="18" rx="4"/><circle cx="8" cy="8" r="2"/><path d="m4 17 5-5 4 4 3-3 5 5"/>',
+    sticker:
+      '<path d="M4 4h16v10l-6 6H4zM14 20v-6h6M8 9h.01M15 9h.01M8 13q4 3 7 0"/>',
     music:
       '<path d="M9 18V5l11-2v13M9 8l11-2"/><ellipse cx="6" cy="18" rx="3" ry="2"/><ellipse cx="17" cy="16" rx="3" ry="2"/>',
     pause: '<path d="M9 5v14M15 5v14"/>',
@@ -348,6 +400,7 @@ function show(v) {
 }
 function goHome() {
   if (state.callStatus !== "idle") return;
+  if (state.lockCameraActive && !state.phoneUnlocked) return returnToLock();
   if (!state.phoneUnlocked) return unlockPhone();
   transitionMedia(null);
   state.navigationStack = [];
@@ -359,6 +412,7 @@ function goHome() {
   appView.scrollTop = 0;
   updatePhoneSignals();
   scheduleFinalNote();
+  scheduleAlbumMessage();
 }
 function openApp(html, { dark = false } = {}) {
   setStatus(dark);
@@ -369,8 +423,11 @@ function openApp(html, { dark = false } = {}) {
   bindDynamic();
   enhanceControls();
   syncAudioUI();
+  bindV8Controls();
+  syncAppleCatalogUI();
 }
 function goBack() {
+  if (state.lockCameraActive && !state.phoneUnlocked) return returnToLock();
   if (state.callStatus !== "idle") return;
   if ($("#photoViewer.open")) return closePhoto();
   const previous = state.navigationStack.pop();
@@ -448,14 +505,15 @@ function renderMessageThread(id) {
   if (id === "paapii") state.paapiiMessageRead = true;
   persistProgress();
   updatePhoneSignals();
-  const msgs = threadMessages("im", id, t.messages)
-    .map(
-      (m) =>
-        `<div class="bubble-line ${m[0] === "me" ? "me" : "them"}"><div class="bubble">${escapeHTML(m[1])}</div></div>`,
+  const messages = threadMessages("im", id, t.messages),
+    lastSentIndex = messages.map(m => m[0]).lastIndexOf("me");
+  const msgs = messages.map(
+      (m, i) =>
+        `<div class="bubble-line ${m[0] === "me" ? "me" : "them"}"><div class="bubble">${escapeHTML(m[1])}</div></div>${i === lastSentIndex ? '<div class="delivery-label">Distribué</div>' : ""}`,
     )
     .join("");
   openApp(
-    `<div class="thread-wrap"><div class="thread-head"><button class="back" data-app-back aria-label="Retour aux messages">${icon("back")}</button><div class="thread-person">${avatarHTML(t.avatar, t.name)}<b>${t.name}</b></div><div class="thread-tools">${iconButton("video", "Appeler en vidéo", "data-contact-call")}${iconButton("phone", "Appeler", "data-contact-call")}</div></div><div class="bubble-area"><div class="time-label">Aujourd’hui ${timeHTML(t.offset + t.messages.length)}</div>${msgs}<div class="delivery-label">Distribué</div></div>${composer("im", id)}</div>`,
+    `<div class="thread-wrap"><div class="thread-head"><button class="back" data-app-back aria-label="Retour aux messages">${icon("back")}</button><div class="thread-person">${avatarHTML(t.avatar, t.name)}<b>${t.name}</b></div><div class="thread-tools">${iconButton("video", "Appeler en vidéo", "data-contact-call")}${iconButton("phone", "Appeler", "data-contact-call")}</div></div><div class="bubble-area"><div class="time-label">Aujourd’hui ${timeHTML(t.offset + t.messages.length)}</div>${msgs}</div>${composer("im", id)}</div>`,
   );
 }
 
@@ -561,9 +619,10 @@ const ALBUM_TRACKS = [
 ].map((title, i) => ({
   id: "album-" + i,
   title,
-  artist: "Manii & Paapii",
+  artist: "Paapii & Manii",
   artwork: KAIROS_COVER,
   src: null,
+  source: "apple-preview",
 }));
 const SECRET_TRACKS = [
   {
@@ -617,13 +676,29 @@ class AudioManager {
     this.audio.addEventListener("error", () => {
       this.state.isPlaying = false;
       syncAudioUI();
-      toast("Ce fichier ne peut pas être lu");
+      if (this.state.currentTrack) toast("Ce fichier ne peut pas être lu");
     });
+  }
+  prime(track) {
+    if (!track?.src || this.state.currentTrack || state.callStatus !== "idle")
+      return;
+    this.audio.preload = "auto";
+    if (this.audio.getAttribute("src") !== track.src) {
+      this.audio.src = track.src;
+      this.audio.load();
+    }
   }
   available() {
     return SECRET_TRACKS.filter((t) => secretUnlocked(t.id));
   }
-  load(track, queue = this.available()) {
+  load(
+    track,
+    queue = track?.source === "apple-preview"
+      ? ALBUM_TRACKS
+      : track?.source === "apple-catalog"
+        ? [track]
+        : this.available(),
+  ) {
     if (!track?.src) {
       toast("Audio indisponible");
       return false;
@@ -632,9 +707,11 @@ class AudioManager {
       toast("Appel en cours");
       return false;
     }
+    if (track.source === "apple-preview") stopOfficialEmbeds();
     this.state.queue = queue.filter((t) => t.src);
     if (this.state.currentTrack?.id !== track.id) {
-      this.audio.src = track.src;
+      if (this.audio.getAttribute("src") !== track.src)
+        this.audio.src = track.src;
       this.state.currentTrack = track;
       this.state.artwork = track.artwork || KAIROS_COVER;
       this.state.currentTime = 0;
@@ -649,6 +726,10 @@ class AudioManager {
     const generation = ++this.playGeneration;
     if (track && !this.load(track)) return;
     if (!this.state.currentTrack) {
+      if (state.currentApp === "music") {
+        await playKairos();
+        return;
+      }
       const first = this.available()[0];
       if (!first) {
         toast("Les fichiers audio sont encore verrouillés");
@@ -729,6 +810,14 @@ function syncAudioUI() {
   $$("[data-now-title]").forEach(
     (el) => (el.textContent = t?.title || "Aucune lecture"),
   );
+  $$("[data-now-artist]").forEach(
+    (el) => (el.textContent = t?.artist || "Paapii & Manii"),
+  );
+  $$("[data-mini-progress]").forEach(
+    (el) =>
+      (el.style.width =
+        (m.duration ? (m.currentTime / m.duration) * 100 : 0) + "%"),
+  );
   $$("[data-now-art]").forEach((el) => {
     el.src = t?.artwork || KAIROS_COVER;
   });
@@ -753,7 +842,7 @@ function syncAudioUI() {
   );
 }
 function miniPlayer() {
-  return `<div class="mini-player liquid"><button class="mini-info" data-now-open><img data-now-art src="${KAIROS_COVER}" alt="Pochette"><span><b data-now-title>Aucune lecture</b><small>Manii & Paapii</small></span></button>${iconButton("play", "Lecture", "data-player-toggle")}${iconButton("next", "Morceau suivant", "data-player-next")}</div>`;
+  return `<div class="mini-player liquid"><button class="mini-info" data-now-open><img data-now-art src="${KAIROS_COVER}" alt="Pochette"><span><b data-now-title>Aucune lecture</b><small data-now-artist>Paapii & Manii</small></span></button>${iconButton("play", "Lecture", "data-player-toggle")}${iconButton("next", "Morceau suivant", "data-player-next")}<span class="mini-progress"><i data-mini-progress></i></span></div>`;
 }
 function playerControls() {
   return `<div class="player-seek"><input type="range" min="0" max="100" step="0.1" value="0" aria-label="Progression audio" data-player-seek><div><span data-player-time>0:00</span><span data-player-duration>0:00</span></div></div><div class="controls">${iconButton("previous", "Morceau précédent", "data-player-prev")}<button class="play" data-player-toggle aria-label="Lecture">${icon("play")}</button>${iconButton("next", "Morceau suivant", "data-player-next")}</div>`;
@@ -770,16 +859,17 @@ function musicTrackRows(tracks) {
   return tracks
     .map(
       (t, i) =>
-        `<button class="music-track ${t.src ? "" : "unavailable"}" data-track="${t.id}" data-audio-available="${!!t.src}"><span>${t.src ? icon("play") : i + 1}</span><span><b>${t.title}</b><small>${t.src ? "Manii & Paapii" : "Audio à venir"}</small></span>${icon("ellipsis")}</button>`,
+        `<button class="music-track ${t.src ? "" : "unavailable"}" data-track="${t.id}" data-audio-available="${!!t.src}"><span>${t.src ? icon("play") : i + 1}</span><span><b>${t.title}</b><small>${t.source === "apple-preview" ? (t.src ? "Aperçu Apple Music" : "Aperçu indisponible") : "Manii & Paapii"}</small></span>${icon("ellipsis")}</button>`,
     )
     .join("");
 }
 function renderMusic(view = "library") {
+  warmAppleMusic();
   const available = audioManager.available();
   const library = `<div class="list-toolbar"><span>Bibliothèque</span>${iconButton("ellipsis", "Options", "data-options")}</div><h1 class="section-title">Bibliothèque</h1><div class="library-categories"><button data-music-album>${icon("contacts")} Artistes ${icon("back")}</button><button data-music-album>${icon("file")} Albums ${icon("back")}</button><button data-music-album>${icon("music")} Morceaux ${icon("back")}</button></div><h2 class="subheading">Ajouts récents</h2><button class="album-tile" data-music-album><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><b>KAIROS</b><span>Manii & Paapii</span></button>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : '<p class="muted library-hint">Quelques fichiers sont restés dans les archives.</p>'}`;
-  const album = `${nav("Bibliothèque", "•••")}<div class="album-header"><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii</p><small>ALBUM · 8 MORCEAUX</small></div><div class="album-actions"><button data-album-play>${icon("play")} Lecture</button><button data-shuffle>${icon("shuffle")} Aléatoire</button></div><div>${musicTrackRows(ALBUM_TRACKS)}</div><p class="muted album-notice">Les morceaux de l’album ne sont pas encore stockés sur cet iPhone.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}`;
+  const album = `${nav("Bibliothèque", "•••")}<div class="album-header"><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii</p><small>ALBUM · 8 MORCEAUX</small></div><div class="album-actions"><button data-album-play>${icon("play")} Lecture</button><button data-shuffle>${icon("shuffle")} Aléatoire</button></div><div>${musicTrackRows(ALBUM_TRACKS)}</div><p class="muted album-notice">Aperçus officiels Apple Music.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}`;
   openApp(
-    `<div class="music-app">${view === "album" ? album : library}${miniPlayer()}<div class="music-tabs"><button class="active" data-music-library>${icon("file")}<span>Bibliothèque</span></button><button data-music-album>${icon("music")}<span>KAIROS</span></button><button data-music-search>${icon("search")}<span>Rechercher</span></button></div></div>`,
+    `<div class="music-app">${view === "album" ? album : library}${view === "library" ? appleRecentlyPlayed() : ""}<p data-apple-loading class="apple-loading"></p><button data-apple-refresh class="hidden apple-retry">Réessayer</button>${officialAlbumEntry("apple")}${miniPlayer()}<div class="music-tabs"><button class="active" data-music-library>${icon("file")}<span>Bibliothèque</span></button><button data-music-album>${icon("music")}<span>KAIROS</span></button><button data-music-search>${icon("search")}<span>Rechercher</span></button></div></div>`,
   );
 }
 
@@ -947,7 +1037,7 @@ function renderSettingDetail(label) {
 function renderSpotify() {
   const available = audioManager.available();
   openApp(
-    `<div class="spotify-app">${nav("KAIROS", "•••")}<div class="spotify-hero"><img src="${KAIROS_COVER}" alt="Pochette KAIROS"><h1>KAIROS</h1><p>Manii & Paapii · Album</p></div><div class="spot-actions">${iconButton("shuffle", "Lecture aléatoire", "data-shuffle")}<button class="spot-play" data-album-play aria-label="Lire l’album">${icon("play")}</button></div>${musicTrackRows(ALBUM_TRACKS)}<p class="album-notice muted">Les titres de l’album ne sont pas encore disponibles sur ce téléphone.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}${miniPlayer()}</div>`,
+    `<div class="spotify-app">${nav("KAIROS", "•••")}<div class="spotify-hero"><button class="spotify-cover-button" data-official-embed="spotify" aria-label="Ouvrir KAIROS dans Spotify"><img src="${KAIROS_COVER}" alt="Pochette KAIROS"></button><h1><button class="spotify-title-button" data-official-embed="spotify">KAIROS</button></h1><p>Manii & Paapii · Album</p></div><div class="spot-actions">${iconButton("shuffle", "Lecture aléatoire", "data-shuffle")}<button class="spot-play" data-album-play aria-label="Lire l’album">${icon("play")}</button></div>${musicTrackRows(ALBUM_TRACKS)}<p class="album-notice muted">Les titres de l’album ne sont pas encore disponibles sur ce téléphone.</p>${available.length ? `<h2 class="subheading">Fichiers récupérés</h2>${musicTrackRows(available)}` : ""}${officialAlbumEntry("spotify")}${miniPlayer()}</div>`,
     { dark: true },
   );
 }
@@ -1009,19 +1099,27 @@ function audioContextFor(view, app = state.currentApp) {
   if (!view) return null;
   if (
     (app === "music" || app === "spotify") &&
-    [renderMusic, renderSpotify, renderAudio].includes(view.renderer)
+    [
+      renderMusic,
+      renderAppleAlbum,
+      renderSpotify,
+      renderAudio,
+      renderPreviewPlayer,
+    ].includes(view.renderer)
   )
     return app;
   if (view.renderer === renderAudio) return `file:${view.args[0]}`;
   return null;
 }
 function transitionMedia(nextView) {
+  stopInstagramRealFeed();
   if (
     !nextView ||
     audioContextFor(nextView) !== audioContextFor(state.currentView)
   )
     audioManager.stop();
   if (nextView?.renderer !== renderFaceTimePreview) stopFaceTime();
+  if (nextView?.renderer !== renderOfficialEmbed) stopOfficialEmbeds();
 }
 let facetimeRequest = 0;
 function stopTracks(stream) {
@@ -1223,6 +1321,8 @@ function triggerIncomingCall(isRecall = false) {
   }
   audioManager.stop();
   stopFaceTime();
+  stopOfficialEmbeds();
+  stopInstagramRealFeed();
   state.unknownCallAttempts += 1;
   if (isRecall) {
     state.unknownCallRecalled = true;
@@ -1351,7 +1451,7 @@ function screenshotApp(src, hotspots = [], dark = false) {
     { dark },
   );
 }
-function renderInstagram(state = "manii-profile") {
+function renderInstagramProfile(profile = "manii-profile") {
   const map = {
     "manii-profile": [
       "assets/images/insta-manii-profile.webp",
@@ -1423,7 +1523,7 @@ function renderInstagram(state = "manii-profile") {
       ],
     ],
   };
-  const [src, hs] = map[state];
+  const [src, hs] = map[profile];
   screenshotApp(src, hs, false);
 }
 /* Bind only the freshly rendered view; persistent AudioManager listeners are installed once. */
@@ -1541,19 +1641,30 @@ function bindDynamic() {
     const t = [...ALBUM_TRACKS, ...audioManager.available()].find(
       (t) => t.id === b.dataset.track,
     );
-    if (t) audioManager.play(t);
+    if (t?.source === "apple-preview") {
+      if (state.currentApp === "spotify")
+        navigate(renderOfficialEmbed, "spotify", "kairos");
+      else playKairos(t.id);
+    } else if (t) audioManager.play(t);
   });
   on("[data-music-album]", () => navigate(renderMusic, "album"));
   on("[data-music-library]", () => navigate(renderMusic));
   on("[data-now-open]", () => {
     const t = audioManager.state.currentTrack;
-    if (t) navigate(renderAudio, t.id);
+    if (t?.source === "apple-preview") navigate(renderPreviewPlayer, t.id);
+    else if (t?.source === "apple-catalog")
+      navigate(renderAppleAlbum, t.catalogKey);
+    else if (t) navigate(renderAudio, t.id);
     else toast("Choisissez un fichier audio");
   });
-  on("[data-album-play]", () => toast("Audio à venir"));
+  on("[data-album-play]", () => playKairos());
   on("[data-shuffle]", (b) => {
     audioManager.state.shuffle = !audioManager.state.shuffle;
     b.setAttribute("aria-pressed", String(audioManager.state.shuffle));
+    if (state.currentApp === "music") {
+      playKairos();
+      return;
+    }
     const tracks = audioManager.available();
     if (tracks.length)
       audioManager.play(tracks[Math.floor(Math.random() * tracks.length)]);
@@ -1794,10 +1905,42 @@ const JOURNEY_EVENTS = new Set([
   "incoming_call_declined",
   "final_note_opened",
   "album_link_clicked",
+  "instagram_opened",
+  "instagram_dm_opened",
+  "emmanuella_opened",
+  "angiste_opened",
+  "corentin_opened",
+  "redka_opened",
+  "final_album_message_shown",
+  "safari_kairos_opened",
+  "spotify_embed_started",
+  "apple_music_embed_opened",
 ]);
 function trackEvent(name, data = {}) {
   if (!JOURNEY_EVENTS.has(name)) return;
-  const safe = name === "app_opened" ? { app: data.app } : {};
+  const apps = [
+    "messages",
+    "whatsapp",
+    "notes",
+    "files",
+    "music",
+    "spotify",
+    "instagram",
+    "safari",
+    "photos",
+    "camera",
+    "phone",
+    "facetime",
+    "settings",
+    "calendar",
+  ];
+  const safe =
+    name === "app_opened" && apps.includes(data.app)
+      ? { app: data.app }
+      : name === "instagram_dm_opened" &&
+          Object.hasOwn(IG_CONTACTS, data.thread)
+        ? { thread: data.thread }
+        : {};
   window.dispatchEvent(
     new CustomEvent("kairos:event", { detail: { name, ...safe } }),
   );
@@ -1822,6 +1965,19 @@ function persistProgress() {
       firstUnlockedAt: state.firstUnlockedAt,
       visitedApps: [...state.visitedApps],
       read: [...state.read],
+      instagramEpoch: state.instagramEpoch,
+      instagramEmmanuellaRead: state.instagramEmmanuellaRead,
+      instagramAngisteOpened: state.instagramAngisteOpened,
+      instagramCorentinOpened: state.instagramCorentinOpened,
+      instagramRedkaOpened: state.instagramRedkaOpened,
+      finalAlbumMessageAvailable: state.finalAlbumMessageAvailable,
+      finalAlbumMessageRead: state.finalAlbumMessageRead,
+      finalAlbumMessageAt: state.finalAlbumMessageAt,
+      safariKairosAvailable: state.safariKairosAvailable,
+      albumLinkClicked: state.albumLinkClicked,
+      instagramReplies: state.instagramReplies,
+      instagramReactions: state.instagramReactions,
+      safariHistory: state.safariHistory,
     }),
   );
 }
@@ -1887,8 +2043,9 @@ function updatePhoneSignals() {
     if (badge) badge.classList.toggle("hidden", !unread);
     $(`#lock [data-route="${app}"]`)?.classList.toggle("hidden", !unread);
   }
+  updateInstagramBadge();
   const old = $("#lockCallNotification");
-  if (state.callHistory) {
+  if (state.callHistory && state.phoneUnlocked) {
     const notification = old || document.createElement("button");
     notification.id = "lockCallNotification";
     notification.className = "lock-notif";
@@ -1899,7 +2056,7 @@ function updatePhoneSignals() {
 }
 let finalTimer = null;
 function hideFinalNotification() {
-  $("#storyNotification").classList.add("hidden");
+  notifications.hide();
 }
 function scheduleFinalNote() {
   clearTimeout(finalTimer);
@@ -1917,31 +2074,40 @@ function scheduleFinalNote() {
       document.hidden
     )
       return;
+    if (
+      !notifications.show({
+        key: "final-note",
+        app: "Notes",
+        image: "assets/icons/notes.png",
+        sender: "02:43",
+        preview: "Il reste une dernière chose.",
+        duration: 16000,
+        open: () => {
+          route("notes");
+          navigate(renderNote, FINAL_NOTE.id);
+        },
+      })
+    )
+      return;
     state.finalSequenceTriggered = true;
     persistProgress();
-    const banner = $("#storyNotification");
-    banner.innerHTML = `<button class="story-open" aria-label="Notes, 02:43, Il reste une dernière chose"><img src="assets/icons/notes.png" alt=""><span><small>NOTES <time>maintenant</time></small><b>02:43</b><span>Il reste une dernière chose.</span></span></button><button class="story-dismiss" aria-label="Fermer la notification">${icon("close")}</button>`;
-    banner.classList.remove("hidden");
-    systemSounds.play("notification");
-    briefFeedback("notification");
-    $(".story-open", banner).onclick = () => {
-      hideFinalNotification();
-      route("notes");
-      navigate(renderNote, FINAL_NOTE.id);
-    };
-    $(".story-dismiss", banner).onclick = hideFinalNotification;
   }, 1600);
 }
 function refreshAfterCall() {
   updatePhoneSignals();
   if (state.currentView?.renderer === renderPhone)
     renderPhone(...state.currentView.args);
-  if (home.classList.contains("active-view")) scheduleFinalNote();
+  if (home.classList.contains("active-view")) {
+    scheduleFinalNote();
+    scheduleAlbumMessage();
+  }
 }
 // Background tabs never finish the narrative while the visitor is elsewhere.
 document.addEventListener("visibilitychange", () => {
-  if (!document.hidden && home.classList.contains("active-view"))
+  if (!document.hidden && home.classList.contains("active-view")) {
     scheduleFinalNote();
+    scheduleAlbumMessage();
+  }
 });
 updatePhoneSignals();
 
@@ -1954,12 +2120,6 @@ function route(name) {
     persistProgress();
     scheduleIncomingCall();
   }
-  if (name === "safari") {
-    transitionMedia(null);
-    trackEvent("album_link_clicked");
-    window.open(ALBUM_URL, "_blank", "noopener");
-    return;
-  }
   const routes = {
     messages: renderMessages,
     photos: renderPhotos,
@@ -1970,6 +2130,7 @@ function route(name) {
     whatsapp: renderWhatsApp,
     spotify: renderSpotify,
     instagram: renderInstagram,
+    safari: renderSafari,
     settings: renderSettings,
     calendar: renderCalendar,
     facetime: renderFaceTime,
@@ -1984,11 +2145,13 @@ function route(name) {
   if (name === "messages") state.messagesOpened = true;
   if (name === "whatsapp") state.whatsappOpened = true;
   if (name === "notes") state.notesOpened = true;
+  if (name === "instagram") trackEvent("instagram_opened");
   if (["messages", "whatsapp", "notes", "files", "music"].includes(name))
     state.visitedApps.add(name);
   persistProgress();
   scheduleIncomingCall();
   clearTimeout(finalTimer);
+  clearTimeout(albumMessageTimer);
   hideFinalNotification();
   toastEl.classList.add("hidden");
   navigate(routes[name]);
@@ -1996,50 +2159,90 @@ function route(name) {
 }
 
 /* BOOT + POINTER GESTURES: coordinates are relative to the phone, including on desktop. */
-$("#enterBtn").onclick = () => {
-  systemSounds.enable();
-  intro.classList.remove("active");
-  phoneScene.classList.add("active");
+function returnToLock() {
+  transitionMedia(null);
+  state.lockCameraActive = false;
+  state.currentApp = null;
+  state.currentView = null;
+  state.navigationStack = [];
+  appContent.innerHTML = "";
   setStatus(true);
   show(lock);
+}
+function openLockCamera() {
+  if (state.phoneUnlocked) return route("camera");
+  state.lockCameraActive = true;
+  state.currentApp = "camera";
+  state.navigationStack = [];
+  state.currentView = { renderer: renderCamera, args: [] };
+  renderCamera();
+  const thumbnail = $("[data-camera-gallery]");
+  if (thumbnail) thumbnail.onclick = returnToLock;
+}
+$("#lockFlashlight").innerHTML = icon("flashlight");
+$("#lockCamera").innerHTML = icon("camera");
+$("#lockFlashlight").onclick = () => {
+  state.flashlightOn = !state.flashlightOn;
+  $("#lockFlashlight").setAttribute("aria-pressed", String(state.flashlightOn));
 };
-$("#unlockBtn").onclick = unlockPhone;
+$("#lockCamera").onclick = openLockCamera;
+syncMobileExperience();
+// V8 starts on the live lockscreen; activation is still explicit at unlock.
+setStatus(true);
+show(lock);
 $("#homeIndicator").onclick = () => {
-  if (lock.classList.contains("active-view")) unlockPhone();
-  else goHome();
+  if (!lock.classList.contains("active-view")) goHome();
 };
 document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-route]");
   if (b) route(b.dataset.route);
 });
+function resetLockSwipe() {
+  lock.classList.remove("lock-dragging");
+  lock.style.removeProperty("--lock-swipe-y");
+}
 let gesture = null,
   suppressClick = false;
 screen.addEventListener("pointerdown", (e) => {
   if (
     e.isPrimary === false ||
     state.callStatus !== "idle" ||
-    e.target.closest("input,textarea,.modal:not(.hidden)")
+    e.target.closest(
+      "input,textarea,.modal:not(.hidden),[data-horizontal-scroll]",
+    )
   )
     return;
   const r = screen.getBoundingClientRect(),
-    x = e.clientX - r.left,
-    y = e.clientY - r.top;
+    ratio = screen.clientWidth / r.width,
+    x = (e.clientX - r.left) * ratio,
+    y = (e.clientY - r.top) * ratio;
   gesture = {
     id: e.pointerId,
+    ratio,
+    startTime: performance.now(),
     x: e.clientX,
     y: e.clientY,
     edge: x < 28,
-    home: y > r.height - 44,
+    home: y > screen.clientHeight - 44,
     lock: lock.classList.contains("active-view"),
     photo: !!$("#photoViewer.open"),
   };
+  if (gesture.lock) {
+    lock.classList.add("lock-dragging");
+    (e.target.closest("button") || screen).setPointerCapture(e.pointerId);
+  }
 });
 screen.addEventListener("pointermove", (e) => {
   if (!gesture || gesture.id !== e.pointerId) return;
-  const dx = e.clientX - gesture.x,
-    dy = e.clientY - gesture.y;
+  if (gesture.lock) {
+    const rawDy = e.clientY - gesture.y, rawDx = e.clientX - gesture.x;
+    const progress = rawDy < 0 && Math.abs(rawDy) > Math.abs(rawDx) * .65 ? Math.min(-rawDy / 80, 1) : 0;
+    lock.style.setProperty("--lock-swipe-y", `${-progress * 28}px`);
+    return;
+  }
+  const dx = (e.clientX - gesture.x) * gesture.ratio,
+    dy = (e.clientY - gesture.y) * gesture.ratio;
   if (
-    (gesture.lock && Math.abs(dy) > 12) ||
     (gesture.home && Math.abs(dy) > 12) ||
     (gesture.edge && dx > 12 && dx > Math.abs(dy) * 1.6)
   )
@@ -2049,12 +2252,18 @@ screen.addEventListener("pointerup", (e) => {
   if (!gesture || gesture.id !== e.pointerId) return;
   const g = gesture;
   gesture = null;
-  const dx = e.clientX - g.x,
-    dy = e.clientY - g.y;
+  const dx = (e.clientX - g.x) * g.ratio,
+    dy = (e.clientY - g.y) * g.ratio;
   let handled = false;
-  if (g.lock && dy < -55 && Math.abs(dy) > Math.abs(dx) * 1.3) {
-    unlockPhone();
-    handled = true;
+  if (g.lock) {
+    resetLockSwipe();
+    const rawDy = e.clientY - g.y, rawDx = e.clientX - g.x,
+      duration = performance.now() - g.startTime;
+    if ((rawDy <= -28 && Math.abs(rawDy) > Math.abs(rawDx) * .75) ||
+        (rawDy <= -16 && duration <= 300 && Math.abs(rawDy) > Math.abs(rawDx) * .65)) {
+      unlockPhone();
+      handled = true;
+    }
   } else if (g.home && dy < -45 && Math.abs(dy) > Math.abs(dx) * 1.3) {
     goHome();
     handled = true;
@@ -2074,7 +2283,7 @@ screen.addEventListener("pointerup", (e) => {
     setTimeout(() => (suppressClick = false), 350);
   }
 });
-screen.addEventListener("pointercancel", () => (gesture = null));
+screen.addEventListener("pointercancel", () => { gesture = null; resetLockSwipe(); });
 screen.addEventListener(
   "click",
   (e) => {

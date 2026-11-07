@@ -6,6 +6,55 @@
       name="viewport"
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
+    <script>
+      // Layout and input capabilities cover Safari, Chrome and embedded browsers.
+      const mobileWidth = matchMedia("(max-width: 700px)"),
+        mobileLandscape = matchMedia(
+          "(orientation: landscape) and (max-height: 700px)",
+        ),
+        coarsePointer = matchMedia("(pointer: coarse)");
+      function syncMobileExperience() {
+        const mobile =
+          coarsePointer.matches &&
+          (mobileWidth.matches || mobileLandscape.matches);
+        document.documentElement.classList.toggle("mobile-experience", mobile);
+        const viewport = window.visualViewport,
+          width = viewport?.width || innerWidth,
+          height = viewport?.height || innerHeight,
+          root = document.documentElement,
+          computed = getComputedStyle(root),
+          inset = (side) =>
+            parseFloat(computed.getPropertyValue("--viewport-safe-" + side)) ||
+            0,
+          top = inset("top"),
+          bottom = inset("bottom"),
+          left = inset("left"),
+          right = inset("right"),
+          scale = Math.max(
+            0.1,
+            Math.min(
+              (width - left - right - 24) / 422,
+              (height - top - bottom - 24) / 914,
+              1,
+            ),
+          );
+        root.style.setProperty("--mobile-viewport-height", height + "px");
+        root.style.setProperty("--mobile-viewport-width", width + "px");
+        root.style.setProperty("--mobile-device-scale", String(scale));
+        root.style.setProperty("--device-fit-x", (left - right) / 2 + "px");
+        root.style.setProperty("--device-fit-y", (top - bottom) / 2 + "px");
+      }
+      syncMobileExperience();
+      [mobileWidth, mobileLandscape, coarsePointer].forEach((query) =>
+        query.addEventListener("change", syncMobileExperience),
+      );
+      addEventListener("resize", syncMobileExperience);
+      addEventListener("orientationchange", syncMobileExperience);
+      window.visualViewport?.addEventListener("resize", syncMobileExperience);
+    </script>
+    <link rel="preconnect" href="https://itunes.apple.com" crossorigin />
+    <link rel="preconnect" href="https://embed.music.apple.com" crossorigin />
+    <link rel="preconnect" href="https://is1-ssl.mzstatic.com" crossorigin />
     <meta name="theme-color" content="#000000" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
     <meta
@@ -14,6 +63,7 @@
     />
     <title>Les archives de KAIROS</title>
     <link rel="stylesheet" href="styles.css" />
+    <link rel="stylesheet" href="v8.css" />
     <link rel="icon" href="assets/icons/music.png" />
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="apple-touch-icon" href="assets/pwa/kairos-192.png" />
@@ -21,24 +71,7 @@
   </head>
   <body>
     <main class="experience">
-      <section id="intro" class="intro active">
-        <div class="intro-card">
-          <img
-            src="assets/images/logo.png"
-            alt="Manii & Paapii"
-            class="intro-logo"
-          />
-          <p class="eyebrow">ARCHIVES // KAIROS</p>
-          <h1>Le téléphone<br />de KAIROS</h1>
-          <p>
-            Un téléphone. Quelques traces. Deux fichiers qui n’auraient
-            peut-être pas dû rester là.
-          </p>
-          <button id="enterBtn" class="primary">Allumer le téléphone</button>
-        </div>
-      </section>
-
-      <section id="phoneScene" class="phone-scene">
+      <section id="phoneScene" class="phone-scene active">
         <div id="device" class="device">
           <div class="screen">
             <div id="statusBar" class="status-bar light-status">
@@ -60,8 +93,8 @@
                   />
                 </svg>
                 <span class="battery-pill"
-                  ><span id="batteryLevel">76</span></span
-                >
+                  ><span id="batteryLevel"></span
+                ></span>
               </span>
             </div>
             <div class="dynamic-island"></div>
@@ -69,31 +102,32 @@
             <section id="lock" class="view lock-view active-view">
               <div class="lock-overlay"></div>
               <div class="lock-center">
+                <span class="lock-padlock" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="6" y="10" width="12" height="11" rx="3" />
+                    <path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg
+                ></span>
                 <div id="lockDate" class="lock-date"></div>
                 <div id="lockTime" class="lock-time"></div>
-                <div class="lock-copy">
-                  Tu as trouvé le téléphone de KAIROS.
-                </div>
               </div>
-              <div class="lock-notifications">
-                <button class="lock-notif" data-route="messages">
-                  <img src="assets/icons/messages.png" alt="" />
-                  <div>
-                    <b>Messages</b><small>maintenant</small
-                    ><strong>Paapii</strong>
-                    <p>frérot t’as gardé le fichier ?</p>
-                  </div>
-                </button>
-                <button class="lock-notif" data-route="whatsapp">
-                  <img src="assets/icons/whatsapp.png" alt="" />
-                  <div>
-                    <b>WhatsApp</b><small>2 min</small><strong>Paapii</strong>
-                    <p>j’ai retrouvé un truc</p>
-                  </div>
-                </button>
+              <div class="lock-notifications"></div>
+              <div class="lock-shortcuts">
+                <button
+                  id="lockFlashlight"
+                  aria-label="Lampe torche"
+                  aria-pressed="false"
+                ></button
+                ><button id="lockCamera" aria-label="Appareil photo"></button>
               </div>
-              <button id="unlockBtn" class="unlock">
-                Balayer vers le haut pour ouvrir
+              <button id="unlockBtn" class="unlock" aria-label="Déverrouiller">
+                Balayez vers le haut pour ouvrir
               </button>
             </section>
 
@@ -201,6 +235,10 @@
         </div>
       </section>
     </main>
-    <script src="app.js"></script>
+    <script src="instagram-data.js" defer></script>
+    <script src="external-content.js" defer></script>
+    <script src="apple-metadata.js" defer></script>
+    <script src="v8.js" defer></script>
+    <script src="app.js" defer></script>
   </body>
 </html>

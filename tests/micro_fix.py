@@ -2,6 +2,7 @@
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
+from browser_fixtures import isolate_apple_metadata
 
 BASE=os.environ.get('KAIROS_TEST_URL','http://127.0.0.1:8000')
 OUT=Path('/tmp/kairos-microfix-screenshots');OUT.mkdir(exist_ok=True)
@@ -9,6 +10,8 @@ OUT=Path('/tmp/kairos-microfix-screenshots');OUT.mkdir(exist_ok=True)
 
 def boot(browser, desktop=False, permission=True):
     c=browser.new_context(viewport={'width':1440,'height':1100} if desktop else {'width':402,'height':874},is_mobile=not desktop,has_touch=True,reduced_motion='reduce',permissions=['camera'] if permission else [])
+    isolate_apple_metadata(c)
+    isolate_apple_metadata(c)
     page=c.new_page();errors=[]
     page.on('pageerror',lambda e:errors.append(str(e)))
     page.on('console',lambda m:errors.append(m.text) if m.type=='error' else None)
@@ -20,7 +23,7 @@ def boot(browser, desktop=False, permission=True):
         window.__cameraCalls.push(c);const stream=await nativeGet(c);window.__streams.push(stream);return stream;
       };''')
     page.goto(BASE,wait_until='networkidle');page.clock.install()
-    page.click('#enterBtn');page.click('#unlockBtn')
+    page.click('#unlockBtn')
     return c,page,errors
 
 
@@ -139,11 +142,11 @@ with sync_playwright() as pw:
         clean(errors);c.close();print('PASS micro-fix: recall after navigation, second '+('accepted' if answer else 'declined')+', no third call',flush=True)
     # Pending recall survives refresh through the same session state, without extra attempts.
     c,p,errors=boot(b);app(p,'phone');p.click('[data-call-decline]');due=p.evaluate('state.recallDueAt')
-    p.reload(wait_until='networkidle');p.click('#enterBtn');p.click('#unlockBtn')
+    p.reload(wait_until='networkidle');p.click('#unlockBtn')
     assert p.evaluate('state.recallDueAt')==due
     fast_until(p,'state.recallDueAt');assert p.locator('[data-call-accept]').is_visible()
     assert p.evaluate('state.unknownCallAttempts')==2
-    p.click('[data-call-decline]');p.reload(wait_until='networkidle');p.click('#enterBtn');p.click('#unlockBtn');p.clock.fast_forward(180000)
+    p.click('[data-call-decline]');p.reload(wait_until='networkidle');p.click('#unlockBtn');p.clock.fast_forward(180000)
     assert p.locator('[data-call-accept]').count()==0
     clean(errors);c.close();print('PASS micro-fix: recall persistence across refresh, no third attempt after refresh',flush=True)
     # Hidden-page cleanup stops live tracks and requires a fresh explicit retry.
