@@ -116,7 +116,7 @@ const ALBUM_URL = "https://album.link/qzsdrsh5r3m8j";
 const AUDIO = {
   abeg: "assets/audio/abeg.wav",
   tout: "assets/audio/tout_gacher.wav",
-  call: "assets/audio/call-0243.wav",
+  call: "assets/audio/call officiel.wav",
 };
 const GALLERY = [
   "assets/images/manii-01.jpg",
@@ -297,9 +297,7 @@ function syncClock() {
 }
 syncClock();
 setInterval(syncClock, 10000);
-// iOS uses the real system chrome; unknown batteries never receive an invented number.
-const iosNative =
-  document.documentElement.classList.contains("ios-native-chrome");
+// Mobile browsers use the real system chrome; unknown batteries have no invented number.
 $(".battery-pill").classList.add("battery-unknown");
 if (navigator.getBattery) {
   navigator
@@ -1086,6 +1084,7 @@ function audioContextFor(view, app = state.currentApp) {
   return null;
 }
 function transitionMedia(nextView) {
+  stopInstagramRealFeed();
   if (
     !nextView ||
     audioContextFor(nextView) !== audioContextFor(state.currentView)
@@ -1295,6 +1294,7 @@ function triggerIncomingCall(isRecall = false) {
   audioManager.stop();
   stopFaceTime();
   stopOfficialEmbeds();
+  stopInstagramRealFeed();
   state.unknownCallAttempts += 1;
   if (isRecall) {
     state.unknownCallRecalled = true;

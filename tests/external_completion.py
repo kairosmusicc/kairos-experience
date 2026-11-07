@@ -4,7 +4,7 @@ Remote documents are fulfilled by explicit local fixtures; this is not live prov
 import os
 from pathlib import Path
 from playwright.sync_api import sync_playwright
-from browser_fixtures import isolate_apple_metadata
+from browser_fixtures import isolate_apple_metadata, isolate_instagram_embeds
 
 BASE=os.environ.get('KAIROS_TEST_URL','http://127.0.0.1:8000')
 OUT=Path('/tmp/kairos-external-completion');OUT.mkdir(exist_ok=True)
@@ -44,7 +44,7 @@ def player_frame(p,url,height):
     frame=p.locator('[data-official-frame]')
     assert frame.count()==1
     assert frame.get_attribute('src')==url
-    assert frame.get_attribute('loading')=='lazy'
+    assert frame.get_attribute('loading')=='eager'
     assert frame.evaluate('f=>f.style.height')==str(height)+'px'
     p.frame_locator('[data-official-frame]').locator('#fixture').wait_for()
     return frame.element_handle().content_frame()
@@ -61,6 +61,7 @@ with sync_playwright() as pw:
             route.fulfill(status=200,content_type='text/html',body='<!doctype html><meta charset="utf-8"><p id="fixture">Isolated provider fixture — lifecycle test only</p>')
         for origin in ['https://embed.music.apple.com/**','https://music.apple.com/**','https://open.spotify.com/**','https://www.instagram.com/**']:
             ctx.route(origin,fixture)
+        isolate_instagram_embeds(ctx)
         p=ctx.new_page();errors=[];requests=[]
         p.on('pageerror',lambda e:errors.append(str(e)))
         p.on('console',lambda m:errors.append(m.text) if m.type=='error' else None)
@@ -84,7 +85,7 @@ with sync_playwright() as pw:
         for index,url in enumerate(POSTS):
             assert '?' not in links.nth(index).get_attribute('href')
             assert links.nth(index).locator('img').count()==0, 'Do not map unmatched local art to an official post'
-            expect_popup(p,f'[data-instagram-public-post]:nth-child({index+1})',url)
+            expect_popup(p,f'[data-ig-real-post="{index}"] [data-instagram-public-post]',url)
         p.click('[data-app-back]')
         p.click('[data-hot="insta-manii-following"]');p.click('[data-hot="insta-paapii-profile"]')
         assert p.locator('.full-shot').get_attribute('src').endswith('insta-paapii-profile.webp')
@@ -160,8 +161,8 @@ with sync_playwright() as pw:
         assert p.evaluate('validatedEmbed("apple","unknown")===null && officialContent("spotify","sensation")===null')
         # No analytics script/SDK is added; provider frames are the only external loads in this test.
         assert p.locator('script[src*="insights"],script[src*="analytics"]').count()==0
-        assert all(url.startswith((BASE,'https://embed.music.apple.com/','https://open.spotify.com/','https://itunes.apple.com/')) for url in requests),requests
+        assert all(url.startswith((BASE,'https://embed.music.apple.com/','https://open.spotify.com/','https://itunes.apple.com/','https://www.instagram.com/embed.js')) for url in requests),requests
         assert not errors,errors
-        print('PASS official completion', 'desktop' if desktop else 'mobile', ': 6 profile links, 6 unmapped public posts, 5 Apple items, Spotify KAIROS only, lazy frames, context destruction, local audio priority, no JS errors/404 with isolated provider fixtures',flush=True)
+        print('PASS official completion', 'desktop' if desktop else 'mobile', ': 6 profile links, 6 real post permalinks, 5 Apple items, Spotify KAIROS only, demand-loaded frames, context destruction, local audio priority, no JS errors/404 with isolated provider fixtures',flush=True)
         ctx.close()
     browser.close()

@@ -7,12 +7,29 @@
       content="width=device-width,initial-scale=1,viewport-fit=cover"
     />
     <script>
-      // Apply native iOS chrome before first paint to avoid a duplicate simulated status bar.
-      if (
-        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
-        (navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1)
-      )
-        document.documentElement.classList.add("ios-native-chrome");
+      // Layout and input capabilities cover Safari, Chrome and embedded browsers.
+      const mobileWidth = matchMedia("(max-width: 700px)"),
+        mobileLandscape = matchMedia(
+          "(orientation: landscape) and (max-height: 700px)",
+        ),
+        coarsePointer = matchMedia("(pointer: coarse)");
+      function syncMobileExperience() {
+        const mobile =
+          coarsePointer.matches &&
+          (mobileWidth.matches || mobileLandscape.matches);
+        document.documentElement.classList.toggle("mobile-experience", mobile);
+        document.documentElement.style.setProperty(
+          "--mobile-viewport-height",
+          (window.visualViewport?.height || innerHeight) + "px",
+        );
+      }
+      syncMobileExperience();
+      [mobileWidth, mobileLandscape, coarsePointer].forEach((query) =>
+        query.addEventListener("change", syncMobileExperience),
+      );
+      addEventListener("resize", syncMobileExperience);
+      addEventListener("orientationchange", syncMobileExperience);
+      window.visualViewport?.addEventListener("resize", syncMobileExperience);
     </script>
     <meta name="theme-color" content="#000000" />
     <meta name="apple-mobile-web-app-capable" content="yes" />
@@ -61,6 +78,18 @@
             <section id="lock" class="view lock-view active-view">
               <div class="lock-overlay"></div>
               <div class="lock-center">
+                <span class="lock-padlock" aria-hidden="true"
+                  ><svg
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    stroke-width="1.8"
+                    stroke-linecap="round"
+                    stroke-linejoin="round"
+                  >
+                    <rect x="6" y="10" width="12" height="11" rx="3" />
+                    <path d="M8 10V7a4 4 0 0 1 8 0v3" /></svg
+                ></span>
                 <div id="lockDate" class="lock-date"></div>
                 <div id="lockTime" class="lock-time"></div>
               </div>
@@ -73,11 +102,9 @@
                 ></button
                 ><button id="lockCamera" aria-label="Appareil photo"></button>
               </div>
-              <button
-                id="unlockBtn"
-                class="unlock"
-                aria-label="Déverrouiller"
-              ></button>
+              <button id="unlockBtn" class="unlock" aria-label="Déverrouiller">
+                Balayez vers le haut pour ouvrir
+              </button>
             </section>
 
             <section id="home" class="view home-view">

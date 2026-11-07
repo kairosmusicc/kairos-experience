@@ -5,7 +5,7 @@ import os
 from pathlib import Path
 from PIL import Image
 from playwright.sync_api import sync_playwright
-from browser_fixtures import isolate_apple_metadata
+from browser_fixtures import isolate_apple_metadata, isolate_instagram_embeds
 BASE=os.environ.get('KAIROS_TEST_URL','http://127.0.0.1:8000')
 ROOT=Path(__file__).resolve().parents[1]
 OUT=Path('/tmp/kairos-v81');OUT.mkdir(exist_ok=True)
@@ -42,14 +42,14 @@ with sync_playwright() as pw:
     b=pw.chromium.launch(executable_path='/usr/bin/chromium',args=['--no-sandbox','--disable-dev-shm-usage'])
     # Unsupported Battery API: no invented percentage. iOS: no duplicate simulated system chrome.
     for ios in (False,True):
-        c=b.new_context(viewport={'width':402,'height':874},is_mobile=ios,has_touch=True,**({'user_agent':IOS} if ios else {}))
+        c=b.new_context(viewport={'width':402,'height':874},is_mobile=ios,has_touch=ios,**({'user_agent':IOS} if ios else {}))
         isolate_apple_metadata(c);p=c.new_page();p.add_init_script('Object.defineProperty(navigator,"getBattery",{value:undefined})')
         p.goto(BASE,wait_until='networkidle')
         assert p.locator('#batteryLevel').inner_text()==''
         assert not p.locator('#lock .lock-notif').count()
         assert 'Tu as trouvé' not in p.locator('#lock').inner_text()
         if ios:
-            assert p.locator('html.ios-native-chrome').count()==1
+            assert p.locator('html.mobile-experience').count()==1
             assert not p.locator('#statusBar').is_visible() and not p.locator('.dynamic-island').is_visible()
         else:assert p.locator('#statusBar').is_visible()
         p.screenshot(path=str(OUT/('ios-lock.png' if ios else 'desktop-sim-lock.png')))
@@ -65,6 +65,7 @@ with sync_playwright() as pw:
         c.close()
     for desktop in (False,True):
         c=b.new_context(viewport={'width':1440,'height':1100} if desktop else {'width':402,'height':874},is_mobile=not desktop,has_touch=True,reduced_motion='reduce')
+        isolate_instagram_embeds(c)
         seen=rich_metadata(c);p=c.new_page();errors=[]
         p.on('pageerror',lambda e:errors.append(str(e)))
         p.on('console',lambda m:errors.append(m.text) if m.type=='error' else None)

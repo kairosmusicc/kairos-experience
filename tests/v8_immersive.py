@@ -3,7 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 from playwright.sync_api import sync_playwright
-from browser_fixtures import isolate_apple_metadata
+from browser_fixtures import isolate_apple_metadata, isolate_instagram_embeds
 
 BASE=os.environ.get('KAIROS_TEST_URL','http://127.0.0.1:8000')
 ROOT=Path(__file__).resolve().parents[1]
@@ -38,6 +38,7 @@ with sync_playwright() as pw:
     for desktop in (False,True):
         ctx=browser.new_context(viewport={'width':1440,'height':1100} if desktop else {'width':402,'height':874},is_mobile=not desktop,has_touch=True,reduced_motion='reduce')
         isolate_apple_metadata(ctx)
+        isolate_instagram_embeds(ctx)
         p=ctx.new_page();errors=[];requests=[]
         p.on('pageerror',lambda e:errors.append(str(e)))
         p.on('console',lambda m:errors.append(m.text) if m.type=='error' else None)
@@ -156,8 +157,8 @@ with sync_playwright() as pw:
         assert p.locator('[data-ig-thread="corentin"] .ig-unread').count()==0
         p.click('[data-ig-thread="emmanuella"]');assert p.locator('.ig-message-line').count()==178
         assert not errors,errors
-        assert all(url.startswith((BASE,'https://itunes.apple.com/')) for url in requests),requests
+        assert all(url.startswith((BASE,'https://itunes.apple.com/','https://www.instagram.com/embed.js')) for url in requests),requests
         assert p.locator('.ig-feed-post,.ig-post-grid').count()==0
-        print('PASS V8', 'desktop' if desktop else 'mobile', ': inbox, Notes touch, four DMs, long scroll, read persistence, posts, tabs, finale→Corentin→Safari, explicit album opening, no JS errors/404/external requests',flush=True)
+        print('PASS V8', 'desktop' if desktop else 'mobile', ': inbox, Notes touch, four DMs, long scroll, read persistence, posts, tabs, finale→Corentin→Safari, explicit album opening, no JS errors/404/unexpected external requests',flush=True)
         ctx.close()
     browser.close()

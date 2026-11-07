@@ -131,3 +131,24 @@ python3 tests/v81_reality.py
 ```
 
 La suite V8.1 couvre mobile et desktop, le mode iOS sans Battery API, les raccourcis verrouillés, les sept DMs, les publications, Safari présent dès le début, le cache et la concurrence audio. Ses réponses iTunes, artworks et médias sont des **fixtures isolées explicites**, pas des métadonnées réelles. Les captures `/tmp/kairos-v81` contenant ces fixtures ne prouvent pas la disponibilité du catalogue Apple. Le proxy de cet environnement refuse les requêtes réelles iTunes (403) ; covers, correspondance des titres et lecture officielle doivent encore être vérifiées sur la preview HTTPS puis sur iPhone Safari physique. Aucun Analytics ni déploiement Production n’est activé.
+
+## V8.2 — Reality Polish
+
+Passe ciblée sur `v8-immersive`, sans merge de main ni promotion Production.
+
+- Publications Manii : capture profil conservée, puis feed interne des six permalinks fournis. Le script officiel Instagram est chargé une seule fois à l’ouverture du feed. Un seul embed est monté à la fois selon la position du scroll ; sortir du feed, masquer la page ou recevoir un appel détruit le lecteur. Si le script échoue ou qu’aucun iframe ne charge sous dix secondes, une carte donne le vrai lien. Aucune photo locale générique n’est attribuée à une publication officielle. Les documents cross-origin peuvent encore afficher une demande de consentement ou de connexion ; leur contenu ne peut pas être inspecté par notre JS.
+- Mobile : détection par media queries de largeur/orientation et pointeur coarse, réévaluée lors des changements de taille. Visual Viewport et safe areas règlent la hauteur disponible. Petite barre système et Island simulées sont masquées sur mobile ; cadenas, date, grande heure, shortcuts, invitation au swipe et Home Indicator restent visibles. La coque desktop garde sa barre complète.
+- Apple/Spotify : chargement explicite eager de la seule iframe ouverte, états loading/success/error, loader immédiat et fallback caché tant qu’aucune erreur ne survient. `load` révèle le lecteur ; `error` ou neuf secondes sans load retire l’iframe et révèle Réessayer et le lien officiel. Retry recrée le lecteur et son timeout. La sortie supprime les timers et le contexte. Previews KAIROS, métadonnées et AudioManager ne sont pas refaits ; Spotify reste KAIROS uniquement.
+- Appel : `AUDIO.call` utilise uniquement `assets/audio/call officiel.wav`, récupéré isolément depuis `origin/main` (`a73f6ac0960025b547803244163b381fbc1456aa`), sans merge. **L’asset distant contient seulement `\r\n` (2 octets), pas un fichier WAV. La lecture réelle est bloquée jusqu’au remplacement par le vrai audio.** Aucun fallback vers l’ancien `call-0243.wav` n’est ajouté ; celui-ci reste dans le dépôt.
+
+```sh
+python3 tests/v82_polish.py
+python3 tests/v81_reality.py
+python3 tests/v8_immersive.py
+python3 tests/external_completion.py
+python3 tests/check_assets.py
+```
+
+La suite V8.2 teste Safari-like, Chrome mobile et petit WebView en émulation Chromium, le paysage/portrait et les changements de hauteur. Elle vérifie les six URLs Instagram, script singleton, un seul lecteur monté, fallback, nettoyage, puis les transitions des lecteurs Apple et Spotify. Les fournisseurs sont remplacés par des fixtures explicites : ce ne sont pas leurs vrais posts ni leurs vrais lecteurs. Les chemins premier appel/rappel sont testés avec un audio de substitution signalé, sans prétendre lire le fichier distant invalide ; son format est vérifié séparément et signalé BLOCKED. Les suites historiques exécutées normalement restent bloquées sur la lecture du fichier d’appel. Pour contrôler leurs autres parcours sans cacher ce blocage, `KAIROS_CALL_TEST_FIXTURE=1` permet explicitement de substituer trois secondes de silence WAV en mémoire dans les tests uniquement, avec avertissement à chaque contexte. Cela ne valide pas la véritable piste d’appel.
+
+Les captures de contrôle sont dans `/tmp/kairos-v82`. Le proxy réseau refuse encore les fournisseurs réels ; leur rendu et la lecture dans Safari/WebViews physiques restent à valider humainement sur la preview HTTPS. Aucune Analytics n’est activée et Safari narratif reste inchangé.

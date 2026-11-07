@@ -341,10 +341,153 @@ function renderIGFeed() {
     else b.removeAttribute("aria-current");
   });
 }
-function renderIGPublications() {
+/* Official embeds are loaded only inside Publications, one visible post at a time. */
+let instagramEmbedPromise = null,
+  instagramFeedCleanup = null;
+function loadInstagramEmbedScript() {
+  if (window.instgrm?.Embeds) return Promise.resolve();
+  if (instagramEmbedPromise) return instagramEmbedPromise;
+  instagramEmbedPromise = new Promise((resolve, reject) => {
+    const script = document.createElement("script");
+    script.src = "https://www.instagram.com/embed.js";
+    script.async = true;
+    script.dataset.instagramEmbedScript = "";
+    script.onload = () =>
+      window.instgrm?.Embeds
+        ? resolve()
+        : reject(new Error("Instagram embed unavailable"));
+    script.onerror = () => reject(new Error("Instagram embed unavailable"));
+    document.head.append(script);
+  });
+  return instagramEmbedPromise;
+}
+function stopInstagramRealFeed() {
+  instagramFeedCleanup?.();
+  instagramFeedCleanup = null;
+}
+function renderInstagramRealFeed() {
+  stopInstagramRealFeed();
   openApp(
-    `<section class="ig-app">${nav("Publications")}<div class="ig-scroll">${instagramPublicPosts()}</div></section>`,
+    `<section class="ig-app ig-real-feed">${nav("Publications")}<div class="ig-scroll ig-real-scroll">${MANII_REAL_INSTAGRAM_CONTENT.map((url, i) => `<article class="ig-real-post" data-ig-real-post="${i}" data-embed-state="idle"><header><b>${INSTAGRAM_PROFILES.manii.username}</b><span>${new URL(url).pathname.startsWith("/reel/") ? "Reel" : "Publication"}</span></header><div class="ig-real-media"><div data-ig-embed-slot></div><p class="ig-embed-loading" role="status">Chargement de la publication…</p><div class="ig-embed-fallback hidden"><b>Publication Instagram</b><span>@${INSTAGRAM_PROFILES.manii.username}</span><a href="${url}" target="_blank" rel="noopener noreferrer">Voir la publication</a></div></div><a class="ig-external-secondary" href="${url}" target="_blank" rel="noopener noreferrer" data-instagram-public-post>Voir sur Instagram</a></article>`).join("")}</div></section>`,
   );
+  const root = $(".ig-real-scroll"),
+    cards = $$("[data-ig-real-post]", root);
+  root.scrollTop = igUI.realFeedScroll || 0;
+  let current = null,
+    observer = null,
+    timeout = null,
+    raf = null,
+    stopped = false,
+    generation = 0;
+  const release = () => {
+    ++generation;
+    clearTimeout(timeout);
+    observer?.disconnect();
+    observer = null;
+    if (current) {
+      $("[data-ig-embed-slot]", current).replaceChildren();
+      current.dataset.embedState = "idle";
+    }
+  };
+  const activate = (card) => {
+    if (current === card || stopped) return;
+    release();
+    current = card;
+    const attempt = generation;
+    card.dataset.embedState = "loading";
+    const slot = $("[data-ig-embed-slot]", card),
+      loading = $(".ig-embed-loading", card),
+      fallback = $(".ig-embed-fallback", card);
+    loading.classList.remove("hidden");
+    fallback.classList.add("hidden");
+    const fail = () => {
+      if (stopped || current !== card || generation !== attempt) return;
+      clearTimeout(timeout);
+      observer?.disconnect();
+      slot.replaceChildren();
+      ++generation;
+      card.dataset.embedState = "error";
+      loading.classList.add("hidden");
+      fallback.classList.remove("hidden");
+    };
+    const ready = () => {
+      if (
+        stopped ||
+        current !== card ||
+        generation !== attempt ||
+        !card.isConnected
+      )
+        return;
+      clearTimeout(timeout);
+      card.dataset.embedState = "success";
+      loading.classList.add("hidden");
+    };
+    const watchFrame = () => {
+      const frame = slot.querySelector("iframe");
+      if (!frame || frame.dataset.observed) return;
+      frame.dataset.observed = "true";
+      frame.addEventListener("load", ready, { once: true });
+      frame.addEventListener("error", fail, { once: true });
+    };
+    timeout = setTimeout(fail, 10000);
+    loadInstagramEmbedScript()
+      .then(() => {
+        if (
+          stopped ||
+          current !== card ||
+          generation !== attempt ||
+          !card.isConnected
+        )
+          return;
+        const block = document.createElement("blockquote");
+        block.className = "instagram-media";
+        block.dataset.instgrmPermalink =
+          MANII_REAL_INSTAGRAM_CONTENT[Number(card.dataset.igRealPost)];
+        block.dataset.instgrmVersion = "14";
+        observer = new MutationObserver(watchFrame);
+        observer.observe(slot, { childList: true, subtree: true });
+        slot.replaceChildren(block);
+        window.instgrm.Embeds.process();
+        watchFrame();
+      })
+      .catch(fail);
+  };
+  const chooseVisible = () => {
+    raf = null;
+    if (stopped) return;
+    const bounds = root.getBoundingClientRect();
+    let best = null,
+      area = 0;
+    for (const card of cards) {
+      const r = card.getBoundingClientRect();
+      const visible = Math.max(
+        0,
+        Math.min(r.bottom, bounds.bottom) - Math.max(r.top, bounds.top),
+      );
+      if (visible > area) {
+        best = card;
+        area = visible;
+      }
+    }
+    if (best) activate(best);
+  };
+  const onScroll = () => {
+    if (!raf) raf = requestAnimationFrame(chooseVisible);
+  };
+  root.addEventListener("scroll", onScroll, { passive: true });
+  instagramFeedCleanup = () => {
+    igUI.realFeedScroll = root.scrollTop;
+    stopped = true;
+    cancelAnimationFrame(raf);
+    root.removeEventListener("scroll", onScroll);
+    release();
+    root.querySelectorAll("iframe,blockquote").forEach((el) => el.remove());
+  };
+  chooseVisible();
+}
+
+function renderIGPublications() {
+  renderInstagramRealFeed();
 }
 function renderIGSearch() {
   openApp(
@@ -504,17 +647,6 @@ function instagramProfileLink(id, label) {
     ? `<a class="ig-profile-link" data-instagram-profile="${id}" href="${profile.url}" target="_blank" rel="noopener noreferrer">${label}</a>`
     : "";
 }
-function instagramPublicPosts() {
-  let post = 0,
-    reel = 0;
-  return `<section class="ig-public-posts"><h2>Sur Instagram</h2><div>${INSTAGRAM_PUBLIC_POSTS.map(
-    (url) => {
-      const isReel = new URL(url).pathname.startsWith("/reel/"),
-        number = isReel ? ++reel : ++post;
-      return `<a href="${url}" target="_blank" rel="noopener noreferrer" data-instagram-public-post>${icon(isReel ? "reels" : "grid")}<span><b>${isReel ? "Reel" : "Publication"} ${number}</b><small>${INSTAGRAM_PROFILES.manii.username}</small></span>${icon("next")}</a>`;
-    },
-  ).join("")}</div></section>`;
-}
 function appleRecentlyPlayed() {
   return `<section class="apple-recent"><h2 class="subheading">Écoutés récemment</h2><div>${Object.entries(
     APPLE_MUSIC_CATALOG,
@@ -555,7 +687,10 @@ function validatedEmbed(provider, key = "kairos") {
   } catch {}
   return null;
 }
+let officialEmbedCleanup = null;
 function stopOfficialEmbeds() {
+  officialEmbedCleanup?.();
+  officialEmbedCleanup = null;
   // Removing the browsing context stops cross-origin media without pretending to control its player.
   $$("[data-official-frame]").forEach((frame) => frame.remove());
 }
@@ -575,20 +710,55 @@ function renderOfficialEmbed(provider, key = "kairos") {
     : SPOTIFY_KAIROS.url;
   trackEvent(apple ? "apple_music_embed_opened" : "spotify_embed_started");
   openApp(
-    `<div class="official-player ${apple ? "music-app apple-official-player" : "spotify-app"}">${nav(apple ? "Musique" : "Spotify")}<header class="official-player-title">${apple ? appleArtworkHTML(key, "official-artwork") : ""}<h1 ${apple ? `data-apple-title="${key}"` : ""}>${content.title}</h1>${apple ? `<p data-apple-artist="${key}">${content.artist || ""}</p>` : content.artist ? `<p>${content.artist}</p>` : ""}</header><div class="official-loading" data-official-loading><span class="player-skeleton"></span>Chargement du lecteur…</div><iframe class="official-frame-pending" data-official-frame data-provider="${provider}" src="${escapeHTML(src)}" title="${content.title} — ${apple ? "Apple Music" : "Spotify"}" loading="lazy" allow="${apple ? "autoplay *; encrypted-media *;" : "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture"}" ${apple ? 'sandbox="allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation"' : ""} frameborder="0" style="width:100%;height:${height}px;overflow:hidden;background:transparent;"></iframe><div class="official-player-fallback"><p data-embed-status role="status" class="hidden">Lecteur indisponible</p><a href="${officialURL}" target="_blank" rel="noopener noreferrer" data-official-fallback>Ouvrir dans ${apple ? "Apple Music" : "Spotify"}</a><button data-embed-retry data-provider="${provider}" data-content="${key}">Recharger le lecteur</button></div></div>`,
+    `<div data-player-state="loading" class="official-player ${apple ? "music-app apple-official-player" : "spotify-app"}">${nav(apple ? "Musique" : "Spotify")}<header class="official-player-title">${apple ? appleArtworkHTML(key, "official-artwork") : ""}<h1 ${apple ? `data-apple-title="${key}"` : ""}>${content.title}</h1>${apple ? `<p data-apple-artist="${key}">${content.artist || ""}</p>` : content.artist ? `<p>${content.artist}</p>` : ""}</header><div class="official-loading" data-official-loading><span class="player-skeleton"></span>Chargement du lecteur…</div><div data-official-slot></div><div class="official-player-fallback hidden" data-official-error><p data-embed-status role="status">Le lecteur ${apple ? "Apple Music" : "Spotify"} n’a pas pu être chargé.</p><a href="${officialURL}" target="_blank" rel="noopener noreferrer" data-official-fallback>Ouvrir dans ${apple ? "Apple Music" : "Spotify"}</a><button data-embed-retry data-provider="${provider}" data-content="${key}">Réessayer</button></div></div>`,
     { dark: !apple },
   );
-  const frame = $("[data-official-frame]");
-  frame.onload = () => {
-    if (frame.isConnected) {
-      frame.classList.remove("official-frame-pending");
-      $("[data-official-loading]")?.classList.add("hidden");
+  const player = $(".official-player"),
+    frame = document.createElement("iframe");
+  let timer;
+  const setPlayerState = (next) => {
+    if (!player.isConnected) return;
+    clearTimeout(timer);
+    player.dataset.playerState = next;
+    $("[data-official-loading]", player).classList.toggle(
+      "hidden",
+      next !== "loading",
+    );
+    $("[data-official-error]", player).classList.toggle(
+      "hidden",
+      next !== "error",
+    );
+    frame.classList.toggle("official-frame-pending", next !== "success");
+    if (next === "error") {
+      frame.onload = frame.onerror = null;
+      frame.remove();
     }
   };
-  frame.onerror = () => {
-    if (frame.isConnected && $("[data-official-frame]") === frame)
-      $("[data-embed-status]")?.classList.remove("hidden");
+  frame.dataset.officialFrame = "";
+  frame.dataset.provider = provider;
+  frame.className = "official-frame-pending";
+  frame.title = content.title + " — " + (apple ? "Apple Music" : "Spotify");
+  frame.loading = "eager";
+  frame.allow = apple
+    ? "autoplay *; encrypted-media *;"
+    : "autoplay; clipboard-write; encrypted-media; fullscreen; picture-in-picture";
+  if (apple)
+    frame.setAttribute(
+      "sandbox",
+      "allow-forms allow-popups allow-same-origin allow-scripts allow-storage-access-by-user-activation allow-top-navigation-by-user-activation",
+    );
+  frame.setAttribute("frameborder", "0");
+  frame.style.cssText = `width:100%;height:${height}px;overflow:hidden;background:transparent;`;
+  frame.onload = () => setPlayerState("success");
+  frame.onerror = () => setPlayerState("error");
+  officialEmbedCleanup = () => {
+    clearTimeout(timer);
+    frame.onload = frame.onerror = null;
+    frame.remove();
   };
+  frame.src = src;
+  timer = setTimeout(() => setPlayerState("error"), 9000);
+  $("[data-official-slot]", player).append(frame);
 }
 
 /* Fresh-view property handlers, no duplicate global listeners on re-render. */
@@ -864,6 +1034,15 @@ document.addEventListener("focusout", (e) => {
 
 // A hidden or departed app must not retain a cross-origin playback context.
 document.addEventListener("visibilitychange", () => {
-  if (document.hidden) stopOfficialEmbeds();
+  if (document.hidden) {
+    stopOfficialEmbeds();
+    stopInstagramRealFeed();
+  } else if (state.callStatus === "idle") {
+    // Recreate a removed browsing context when returning from a browser tab/app.
+    if ($(".ig-real-feed")) renderInstagramRealFeed();
+  }
 });
-window.addEventListener("pagehide", stopOfficialEmbeds);
+window.addEventListener("pagehide", () => {
+  stopOfficialEmbeds();
+  stopInstagramRealFeed();
+});
