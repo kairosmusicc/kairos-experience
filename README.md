@@ -416,8 +416,9 @@ y compris depuis l'écran verrouillé. Dans le fil SORIAK, la bulle et le son su
 Le contenu et la logique d'unlock ne changent pas ; seuls les boutons de bannière
 rejoignent les cibles de tap autorisées pendant la capture du pointeur.
 
-Ajouter simplement le fichier `assets/audio/soriak-notification.mp3` puis recharger
-la Preview. Aucun fichier de production n'est généré par les tests. Le module
+Le fichier fourni `assets/audio/soriak-notification.mp3` est repris tel quel depuis
+le dépôt. Le remplacer à ce même chemin puis recharger la Preview suffit. Aucun
+fichier de production n'est généré par les tests. Le module
 `soriak-sound.js` crée un seul élément Audio, préchargé et amorcé silencieusement
 sur le premier pointerup ou clavier dans le téléphone. Chaque vraie réception
 possède une tentative sonore persistée ; ni refresh ni répétition d'événement
