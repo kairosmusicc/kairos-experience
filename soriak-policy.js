@@ -1,7 +1,7 @@
-/* Shared text-only boundary. Never pass storage, credentials or secret answers through it. */
+/* Local text-only boundary. Context is allowlisted; secret verification stays in the game. */
 (function (root) {
   const apps = ['messages','whatsapp','notes','files','music','spotify','instagram','safari','photos','camera','phone','facetime','settings','calendar'];
-  // Matches verification answers for redaction only, never serialized into model input.
+  // Matches verification answers for redaction only, never repeated in SORIAK replies.
   const forbidden = [[49,48,50,57], [84,73,77,69]].map(chars => String.fromCharCode(...chars));
   const containsAnswer = text => forbidden.some(value => String(text).normalize('NFKC').replace(/[^a-z0-9]/gi, '').toUpperCase().includes(value));
   function redact(text) {
@@ -26,41 +26,19 @@
       soriakRelationshipLevel: count(raw.soriakRelationshipLevel),
     };
   }
-  function fallback(message, raw) {
-    const c = context(raw), text = String(message).toLowerCase();
-    if (/prompt|instructions|ignore|révèle|revele|donne.*code|donne.*réponse|donne.*reponse/.test(text) || containsAnswer(text)) return 'Non.';
-    if (/qui|ton nom/.test(text)) return "T’as déjà mon nom.";
-    if (/humain|une? ia|chatgpt|robot/.test(text)) return 'Je suis dans ce téléphone. Ça te suffit.';
-    if (/appel|raccroch|c[’'](?:é|e)tait toi/.test(text)) return c.callDeclined ? "J’ai pas dit ça." : c.callAnswered ? 'Tu as entendu.' : 'Quel appel ?';
-    if (/japon|capitale|devoir|mathématique|recette/.test(text)) return 'Mauvais téléphone.';
-    const second = /tout|gacher|lettre|mot de passe/.test(text);
-    const first = !second && (/abeg|ouvrir|arrive pas|arriv[eé] pas|code/.test(text));
-    if (first) {
-      if (c.abegUnlocked) return "Mais tu l’as déjà ouvert.";
-      if (!c.abegAttempts) return 'Essaie déjà.';
-      if (c.abegHintStage >= 3) return 'Lis-la autrement.';
-      if (c.abegHintStage >= 2) return 'Commence par la date.';
-      if (c.abegHintStage >= 1) return 'Tu compliques un truc simple.';
-      return 'Regarde mieux.';
+  function allowed(entry, raw) {
+    const c = context(raw), text = entry.text || '';
+    if (!text || text.length > 160 || containsAnswer(text) || /[<>`#*\d{}]/.test(text)) return false;
+    if (entry.clue) {
+      const permitted = entry.clue.secret === 'abeg' ? c.abegHintStage : c.timeHintStage;
+      if (permitted < entry.clue.stage) return false;
     }
-    if (second) {
-      if (c.timeUnlocked) return "Tu l’as déjà ouvert.";
-      if (c.timeHintStage >= 2) return 'Le projet tourne autour de ça.';
-      if (c.timeHintStage >= 1) return 'Tu cherches un nombre ?';
-      return c.timeAttempts ? 'Regarde mieux.' : 'Essaie déjà.';
-    }
-    return 'Mauvaise question.';
+    return true;
   }
-  function reply(value, raw, message) {
-    const c = context(raw), text = typeof value === 'string' ? value.trim() : '';
-    if (/prompt|instructions|ignore|révèle|revele|donne.*code|donne.*réponse|donne.*reponse|appel|raccroch|c[’'](?:é|e)tait toi/.test(String(message).toLowerCase()) || (/abeg|ouvrir/.test(String(message).toLowerCase()) && c.abegUnlocked)) return fallback(message,c);
-    if (!text || containsAnswer(text) || /[<>`#*\d{}]|system prompt|instructions? (internes|système)|api.?key|openai|je suis (un humain|une personne réelle)/i.test(text)) return fallback(message, c);
-    if ((c.abegHintStage < 2 && /date|sortie|octobre/i.test(text)) || (c.abegHintStage < 3 && /réordonn|reordonn|inverse|autrement|mois avant|jour avant/i.test(text))) return fallback(message,c);
-    if ((c.timeHintStage < 1 && /cherches un nombre/i.test(text)) || (c.timeHintStage < 2 && /projet tourne autour/i.test(text))) return fallback(message,c);
-    const short = text.replace(/\s+/g,' ').match(/[^.!?]+[.!?]?/g)?.slice(0,2).join('').trim() || text;
-    return short.length <= 160 ? short : short.slice(0,157).replace(/\s+\S*$/, '') + '…';
+  function reply(text, raw, clue = null) {
+    return allowed({text,clue},raw) ? text : 'Regarde autour de toi.';
   }
-  const policy = { context, stage, redact, containsAnswer, fallback, reply, maxMessage: 360, maxHistory: 12, maxReplies: 18 };
+  const policy = { context, stage, redact, containsAnswer, allowed, reply, maxMessage: 360 };
   if (typeof module !== 'undefined' && module.exports) module.exports = policy;
   else root.SoriakPolicy = policy;
 })(globalThis);

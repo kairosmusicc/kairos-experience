@@ -1,4 +1,4 @@
-/* Living OS + interactive SORIAK UI. Models can return text only. */
+/* Living OS + local SORIAK dialogue UI. Dialogue never changes game facts. */
 (function () {
   const avatar = 'assets/images/soriak.jpg';
   const copy = Object.freeze({
@@ -236,7 +236,7 @@
     state:state.livingOS.soriak,
     legacy:records().map(n=>({id:n.id,role:'soriak',text:notificationText(n),at:n.at,source:'living-os'})).concat(state.livingOS.soriak.receivedReplies.map((n,i)=>({id:'legacy-user:'+i,role:'user',text:n.text,at:n.at,source:'interactive'}))),
     context:()=>SoriakEngine.getContext(),persist:persistProgress,changed:()=>{
-      const pending = state.livingOS.soriak.pendingRequest;
+      const pending = state.livingOS.soriak.pendingReply;
       if (pending) emitOSEvent('soriak_user_message');
       syncUI();
     },
@@ -247,10 +247,10 @@
       if (!inThread) state.livingOS.soriak.unreadCount++;
       state.livingOS.notificationHistory.push({id:message.id,type:'soriak_message',text:message.text,at:message.at,read:inThread,bannerPending:!inThread,source:'interactive'});
       state.livingOS.notificationHistory = state.livingOS.notificationHistory.slice(-60);
-      emitOSEvent('soriak_ai_reply',{fallback:meta.fallback});
+      emitOSEvent('soriak_reply',{intent:meta.intent});
     },debug,
   });
-  // No privileged model tools: output is escaped text; verification stays in trySecret().
+  // Local dialogue only: output is escaped text; verification stays in trySecret().
   chat.start();
   syncUI();
   engine.start();
