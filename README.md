@@ -199,3 +199,102 @@ Micro-fix après V8.3.1 : déverrouillage normal uniquement par swipe, sans tap 
 Le thread iMessage Paapii reprend exactement les 14 messages fournis : Manii a oublié le code, Paapii donne « la date », « 29/10 », puis « lis-la pas comme un français. ». Aucun code explicite n’est écrit dans la conversation. La preview reprend cette dernière phrase. « Distribué » est rendu une seule fois immédiatement après la dernière bulle `me`, même si des messages reçus suivent ; son style est rapproché de cette bulle. Le secret ABEG et `trySecret()` restent inchangés.
 
 Validation ciblée : `python3 tests/v831_lock_swipe.py` vérifie les taps, swipes depuis milieu/bas/date/heure/texte, flicks, diagonales, cancel et reset aux scales 1 / 0,9 / 0,8 / 0,7, puis la narration exacte et le statut après une nouvelle réponse. Les 22 captures avant/après sont conservées dans `/tmp/kairos-swipe-imessage-golden` : 20 écrans gelés inchangés à l’arrondi de rendu près ; les deux listes Messages diffèrent uniquement dans la preview Paapii autorisée. Les anciens scripts qui initialisaient le téléphone par clic sur `unlockBtn` doivent désormais utiliser un vrai swipe dans leur harness. Aucun changement aux apps gelées, au device fit, à Apple/Instagram, au WAV d’appel ou à la PWA. La recette Safari physique reste à confirmer sur preview.
+
+## V9 — Living OS / SORIAK
+
+V9 is deterministic client-side behavior, with no backend or model calls.
+`living-os.js` owns the scheduler; `soriak.js` contains the centralized rule registry,
+fixed message copy, Messages/notification adapter, and future conversation boundary.
+The existing shell, swipe, conversations, secrets, calls and catalog remain intact.
+The supplied `soriak.jpeg` is retained; `soriak.jpg` is its byte-identical UI alias.
+
+### Events and rules
+
+Public APIs: `emitOSEvent(type, payload, optionalEventId)`,
+`scheduleOSEffect(ruleId, context)`, `cancelOSEffect(effectId)`,
+`processPendingOSEffects()`. Event IDs deduplicate replayed transitions; independent
+app visits and real playback starts are separate events. The bounded event journal
+keeps 120 entries; explicit replay IDs are retained separately so journal eviction
+does not re-emit a once-only transition. Implemented events: `phone_unlocked`, `app_opened`, `file_opened`,
+`secret_attempt_failed`, `secret_unlocked`, `track_played`, `call_declined`,
+`call_answered`, `message_opened`, `notification_opened`, `lockscreen_returned`.
+Internal events: `os_effect_delivered`, `soriak_user_message`.
+
+A rule declares `id`, `event`, `when(context, payload)`, `delay: [minMs, maxMs]`,
+`once`, optional `obsolete(context)`, priority, and a registered effect/message ID.
+To add a reaction, add fixed copy and one rule in `soriak.js`; emit the semantic
+event at its existing business transition. Renderers never own narrative timers.
+`when` is rechecked at delivery. Secret completion removes obsolete pending hints.
+
+### Discovery and hints
+
+SORIAK is absent until the first delivered message. Three ABEG failures schedule
+“Tu compliques un truc simple.” after 25–45 seconds. Five failures, after that
+message, unlock the delayed date hint; seven unlock the final indirect hint.
+`getSecretStage()` derives LOCKED/FAIL_n/pending/hint-sent/UNLOCKED stages from
+these records without storing a conflicting second state machine. TIME has separate
+counters and messages at three/five failures. Both form errors
+stay generic; neither password appears in SORIAK copy. ABEG success only schedules
+“Enfin.” if SORIAK was already discovered.
+
+Fallback requires an unlocked phone and three distinct apps. It delivers at
+110–120 seconds after first unlock for early explorers, or 20–30 seconds after
+the third app if that happens later. Exploration tracking is separate from the
+legacy five-app call counter so recall/first-call timing does not change.
+A discovered SORIAK may react once to a declined call, at low priority. One optional
+controlled reply (“Tu es qui ?”) receives one delayed “Mauvaise question.” No free
+text or generated conversation is simulated. Existing Music history is an ambient
+proof point: only successfully started playback enters Recently Played.
+
+### Persistence, timing and delivery
+
+`state.livingOS` and failed-attempt counts use existing `persistProgress()` and
+`kairos.progress` session storage. There is no second storage layer. Existing
+secret storage remains unchanged. Fired rule IDs, pending effects, actual message
+records/read flags, limited playback history, controlled replies and the session
+seed survive refresh within the session. A pending record contains `id`, `ruleId`,
+`createdAt`, `dueAt`, `payload`, `once`. Its deadline never changes on refresh.
+A stable hash of the persisted session seed + rule ID selects the delay; narrative
+scheduling never uses `Math.random()`.
+
+One central timer processes pending work. Calls, FaceTime, blocking modals, hidden
+documents, another banner, and the initial locked phone defer delivery. Delivery
+commits synchronously with progress. At most one major effect fires per pass;
+SORIAK messages are at least 30 seconds apart and message IDs never repeat.
+Opening SORIAK marks actual delivered messages read, hides its banner, removes its
+lockscreen card, and updates the badge. Unread cards use real timestamps. Missed
+calls use existing call history and stop appearing after Phone has been visited.
+No old conversation is manufactured, and no app auto-opens on delivery.
+
+### Debug and verification
+
+`?livingDebug=1` on localhost or feature-branch Vercel aliases accelerates rule
+delays (~30s → 1s), exploration gate (90s → 2s), and message spacing (1.2s).
+It logs events/scheduling/delivery/cancellation, with no password values or debug
+UI. Production domains and production deployment URLs ignore the flag.
+
+Start `python -m http.server 8765`, then run:
+
+```sh
+node tests/living_os_engine.cjs
+KAIROS_TEST_URL=http://127.0.0.1:8765 python tests/living_os_browser.py
+KAIROS_TEST_URL=http://127.0.0.1:8765 python tests/living_os_native_swipe.py
+KAIROS_TEST_URL=http://127.0.0.1:8765 python tests/living_os_regressions.py
+```
+
+Browser tests isolate external Apple/Instagram providers; they do not validate
+live provider availability. Frozen legacy suites still contain tap-to-unlock
+fixtures from before the native swipe release. For V9 regression execution only,
+those fixtures use `unlockPhone()`; assertions and production code stay unchanged.
+The separate native touch suite covers physical swipes at scales 1/.9/.8/.7.
+
+### V9.1 boundary
+
+`SoriakEngine.getContext()` returns only discovery/relationship, secret attempt and
+completion flags, call flags, visited app names, and recent playback metadata.
+`receiveUserMessage()` currently accepts one controlled phrase only;
+`addSystemMessage()` accepts registered rule/message IDs and checks their conditions.
+Future `/api/soriak` must keep all API keys server-side. Never put an OpenAI secret
+in frontend code, grant generated text privileged JS execution, or accept arbitrary
+actions. Any future tool/action request needs an allowlist. Never expose
+`unlockSecret()` to a model: secret verification stays deterministic business logic.
