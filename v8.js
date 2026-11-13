@@ -656,14 +656,12 @@ function instagramProfileLink(id, label) {
     : "";
 }
 function appleRecentlyPlayed() {
-  return `<section class="apple-recent"><h2 class="subheading">Écoutés récemment</h2><div>${Object.entries(
-    APPLE_MUSIC_CATALOG,
-  )
-    .map(
-      ([key, c]) =>
-        `<button class="apple-recent-item ${key === "kairos" ? "kairos-priority" : ""}" data-apple-content="${key}">${appleArtworkHTML(key)}<span><b data-apple-title="${key}">${c.title}</b><small data-apple-artist="${key}">${c.artist || "Morceau · Apple Music"}</small></span>${icon("play")}</button>`,
-    )
-    .join("")}</div></section>`;
+  const played = state.livingOS?.recentlyPlayed || [];
+  return `<section class="apple-recent"><h2 class="subheading">Écoutés récemment</h2><div>${played.map(t => {
+    const key = Object.hasOwn(APPLE_MUSIC_CATALOG, t.catalogKey) ? t.catalogKey : "kairos";
+    const c = APPLE_MUSIC_CATALOG[key];
+    return `<button class="apple-recent-item ${key === "kairos" ? "kairos-priority" : ""}" data-apple-content="${key}">${appleArtworkHTML(key)}<span><b>${escapeHTML(t.title)}</b><small>${escapeHTML(c.artist || "Apple Music")}</small></span>${icon("play")}</button>`;
+  }).join("")}</div></section>`;
 }
 function officialContent(provider, key = "kairos") {
   if (provider === "spotify") return key === "kairos" ? SPOTIFY_KAIROS : null;

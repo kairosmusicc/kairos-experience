@@ -65,7 +65,8 @@ const state = {
   facetimeActive: false,
   abegUnlocked: session.get("kairos.abeg") === "1",
   toutGacherUnlocked: session.get("kairos.tout") === "1",
-  attempts: { abeg: 0, tout: 0 },
+  attempts: { abeg: Math.max(0, Number(savedProgress.attempts?.abeg) || 0), tout: Math.max(0, Number(savedProgress.attempts?.tout) || 0) },
+  livingOS: savedProgress.livingOS || null,
   messages: {},
   read: new Set(savedProgress.read || []),
   photoIndex: 0,
@@ -397,6 +398,8 @@ function setStatus(dark = false) {
 function show(v) {
   $$(".view").forEach((x) => x.classList.remove("active-view"));
   v.classList.add("active-view");
+  if (v === lock) window.emitOSEvent?.("lockscreen_returned");
+  window.SoriakEngine?.syncUI();
 }
 function goHome() {
   if (state.callStatus !== "idle") return;
@@ -501,6 +504,7 @@ function threadMessages(kind, id, original) {
 function renderMessageThread(id) {
   const t = IMessageThreads[id];
   if (!t) return;
+  window.emitOSEvent?.("message_opened", { app: "messages", thread: id });
   state.read.add("im-" + id);
   if (id === "paapii") state.paapiiMessageRead = true;
   persistProgress();
@@ -532,6 +536,7 @@ function renderWhatsApp() {
 function renderWAThread(id) {
   const t = WAThreads[id];
   if (!t) return;
+  window.emitOSEvent?.("message_opened", { app: "whatsapp", thread: id });
   state.read.add("wa-" + id);
   persistProgress();
   updatePhoneSignals();
@@ -559,6 +564,7 @@ function secretUnlocked(kind) {
   return state[kind === "abeg" ? "abegUnlocked" : "toutGacherUnlocked"];
 }
 function renderFileLock(kind) {
+  window.emitOSEvent?.("file_opened", { file: kind });
   if (secretUnlocked(kind)) {
     state.currentView = { renderer: renderAudio, args: [kind] };
     return renderAudio(kind);
@@ -572,6 +578,8 @@ function trySecret(kind, value) {
   if (value.trim().toUpperCase() === (kind === "abeg" ? "1029" : "TIME")) {
     state[kind === "abeg" ? "abegUnlocked" : "toutGacherUnlocked"] = true;
     session.set("kairos." + kind, "1");
+    persistProgress();
+    window.emitOSEvent?.("secret_unlocked", { secret: kind === "tout" ? "time" : kind });
     trackEvent(kind === "abeg" ? "abeg_unlocked" : "tout_gacher_unlocked");
     briefFeedback("secret");
     systemSounds.play("fileUnlock");
@@ -580,16 +588,10 @@ function trySecret(kind, value) {
     renderAudio(kind);
     return;
   }
-  const n = ++state.attempts[kind];
-  const hints =
-    kind === "tout"
-      ? [
-          "Mot de passe incorrect",
-          "Quatre lettres. Tu les as déjà vues.",
-          "Ce qui nous échappe, même quand on essaie de le garder.",
-        ]
-      : ["Code incorrect", "La date de sortie.", "Le mois avant le jour."];
-  $("#passwordFeedback").textContent = hints[Math.min(n - 1, 2)];
+  ++state.attempts[kind];
+  persistProgress();
+  window.emitOSEvent?.("secret_attempt_failed", { secret: kind === "tout" ? "time" : kind, attempts: state.attempts[kind] });
+  $("#passwordFeedback").textContent = kind === "tout" ? "Mot de passe incorrect" : "Code incorrect";
   $("#codeField").value = "";
   $("#codeField").focus();
 }
@@ -742,6 +744,7 @@ class AudioManager {
       if (generation !== this.playGeneration) return;
       if (!audioContextFor(state.currentView) || state.callStatus !== "idle")
         this.stop();
+      else window.dispatchEvent(new CustomEvent("living:track-played", { detail: this.state.currentTrack }));
     } catch {
       if (generation !== this.playGeneration) return;
       this.state.isPlaying = false;
@@ -1949,6 +1952,8 @@ function persistProgress() {
   session.set(
     "kairos.progress",
     JSON.stringify({
+      livingOS: state.livingOS,
+      attempts: state.attempts,
       messagesOpened: state.messagesOpened,
       paapiiMessageRead: state.paapiiMessageRead,
       whatsappOpened: state.whatsappOpened,
@@ -2053,6 +2058,7 @@ function updatePhoneSignals() {
     notification.innerHTML = `<img src="assets/icons/phone.png" alt=""><div><b>Téléphone</b><small>récent</small><strong>Numéro inconnu</strong><p>${state.callHistory.outcome === "answered" ? "Appel entrant" : "Appel manqué"}</p></div>`;
     if (!old) $(".lock-notifications").append(notification);
   }
+  window.SoriakEngine?.syncSignals();
 }
 let finalTimer = null;
 function hideFinalNotification() {
@@ -2268,7 +2274,7 @@ screen.addEventListener("pointerdown", (e) => {
     suppressClick = false;
     gesture.samples = [{ y: e.clientY, time: e.timeStamp }];
     gesture.dragged = false;
-    gesture.tapTarget = e.target.closest("#lockFlashlight, #lockCamera");
+    gesture.tapTarget = e.target.closest("#lockFlashlight, #lockCamera, .lock-notif");
     screen.setPointerCapture(e.pointerId);
     home.classList.add("lock-home-preview");
     home.inert = true;
