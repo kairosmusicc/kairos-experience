@@ -82,8 +82,9 @@
         if (this.blocked()) return;
         const pending = [...this.state.pending].sort((a, b) => (this.rules.find(r => r.id === b.ruleId)?.priority || 0) - (this.rules.find(r => r.id === a.ruleId)?.priority || 0) || a.dueAt - b.dueAt);
         for (const effect of pending) {
-          if (effect.dueAt > this.now() || this.now() - this.state.lastMajorAt < this.spacing()) continue;
           const rule = this.rules.find(r => r.id === effect.ruleId);
+          const spacing = rule?.spacing === 0 ? 0 : this.spacing();
+          if (effect.dueAt > this.now() || this.now() - this.state.lastMajorAt < spacing) continue;
           if (!rule || !rule.when(this.context(), effect.payload)) continue;
           // Delivery is synchronous: accepted UI + progress commit in the same JS task.
           if (!this.deliver(rule.effect, effect)) continue;

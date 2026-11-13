@@ -526,7 +526,7 @@ class PhoneNotifications {
     this.timer = null;
     this.key = null;
   }
-  show({ key, app, image, sender, preview, open, duration = 10000 }) {
+  show({ key, app, image, sender, preview, open, duration = 10000, sound = true }) {
     if (
       state.callStatus !== "idle" ||
       state.facetimeActive ||
@@ -539,7 +539,7 @@ class PhoneNotifications {
     const banner = $("#storyNotification");
     banner.innerHTML = `<button class="story-open" aria-label="${escapeHTML(app + ", " + sender + ", " + preview)}"><img src="${image}" alt=""><span><small>${escapeHTML(app.toUpperCase())}<time>maintenant</time></small><b>${escapeHTML(sender)}</b><span>${escapeHTML(preview)}</span></span></button><button class="story-dismiss" aria-label="Fermer la notification">${icon("close")}</button>`;
     banner.classList.remove("hidden");
-    systemSounds.play("notification");
+    if (sound) systemSounds.play("notification");
     briefFeedback("notification");
     $(".story-open", banner).onclick = () => {
       this.hide();

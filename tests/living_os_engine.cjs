@@ -34,4 +34,9 @@ engine = new LivingOSEngine({ rules, facts: () => ({}), now: () => clock, persis
   deliver: () => { deliveries++; engine.process(); return true; } });
 engine.emit('failure'); clock += 50000; engine.process(); engine.process();
 assert.equal(deliveries, 1); clock += 30000; engine.process(); assert.equal(deliveries, 2);
+// The first reception bypasses spacing once; subsequent messages retain spacing.
+const deliveredIds=[];
+engine=new LivingOSEngine({rules:[{...rule,id:'regular',delay:[0,0]},{...rule,id:'intro',delay:[1200,1200],priority:10,spacing:0}],facts:()=>({}),now:()=>clock,persist:()=>{},blocked:()=>false,deliver:(effect,pending)=>{deliveredIds.push(pending.ruleId);return true;}});
+engine.state.lastMajorAt=clock;engine.emit('failure');clock+=2000;engine.process();engine.process();
+assert.deepEqual(deliveredIds,['intro']);clock+=30000;engine.process();assert.deepEqual(deliveredIds,['intro','regular']);
 console.log('PASS engine: event/effect deduplication, stable delays, refresh/expiry, blocked delivery, cancellation, reentrancy, spacing');

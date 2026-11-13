@@ -200,7 +200,7 @@ Le thread iMessage Paapii reprend exactement les 14 messages fournis : Manii a o
 
 Validation ciblée : `python3 tests/v831_lock_swipe.py` vérifie les taps, swipes depuis milieu/bas/date/heure/texte, flicks, diagonales, cancel et reset aux scales 1 / 0,9 / 0,8 / 0,7, puis la narration exacte et le statut après une nouvelle réponse. Les 22 captures avant/après sont conservées dans `/tmp/kairos-swipe-imessage-golden` : 20 écrans gelés inchangés à l’arrondi de rendu près ; les deux listes Messages diffèrent uniquement dans la preview Paapii autorisée. Les anciens scripts qui initialisaient le téléphone par clic sur `unlockBtn` doivent désormais utiliser un vrai swipe dans leur harness. Aucun changement aux apps gelées, au device fit, à Apple/Instagram, au WAV d’appel ou à la PWA. La recette Safari physique reste à confirmer sur preview.
 
-## V9 — Living OS / SORIAK
+## V9 — Living OS / SORIAK (historical; superseded by V9.1 below)
 
 V9 is deterministic client-side behavior, with no backend or model calls.
 `living-os.js` owns the scheduler; `soriak.js` contains the centralized rule registry,
@@ -288,13 +288,154 @@ fixtures from before the native swipe release. For V9 regression execution only,
 those fixtures use `unlockPhone()`; assertions and production code stay unchanged.
 The separate native touch suite covers physical swipes at scales 1/.9/.8/.7.
 
-### V9.1 boundary
+## V9.1 — SORIAK local et déterministe (version actuelle)
 
-`SoriakEngine.getContext()` returns only discovery/relationship, secret attempt and
-completion flags, call flags, visited app names, and recent playback metadata.
-`receiveUserMessage()` currently accepts one controlled phrase only;
-`addSystemMessage()` accepts registered rule/message IDs and checks their conditions.
-Future `/api/soriak` must keep all API keys server-side. Never put an OpenAI secret
-in frontend code, grant generated text privileged JS execution, or accept arbitrary
-actions. Any future tool/action request needs an allowlist. Never expose
-`unlockSecret()` to a model: secret verification stays deterministic business logic.
+Le chat ne possède plus de backend, de modèle ni de configuration de fournisseur.
+Il fonctionne sans connexion : aucun fetch, endpoint, quota de requêtes ou timeout
+réseau ne fait partie de la discussion. La route API et son ancien fichier de
+configuration ont été supprimés. Les lecteurs externes des autres apps restent
+inchangés ; leur disponibilité ne conditionne pas le chat.
+
+### Architecture
+
+- `soriak-intents.js` : 44 intentions, seuils, mots entiers, expressions pondérées,
+  priorités explicites et normalisation (accents, casse, apostrophes, ponctuation,
+  SMS et quelques fautes fréquentes). Les intentions spécifiques comme une demande
+  de code passent avant les thèmes incidentels. Une égalité ambiguë revient au
+  neutre au lieu d'inventer une réponse précise.
+- `soriak-responses.js` : 347 formulations distinctes écrites, séparées du classement.
+  Les groupes déclarent leurs conditions, priorités, poids et éventuel niveau
+  d'indice. Les appels, visites, écoutes et résolutions ne sont affirmés que si les
+  faits autorisés le permettent.
+- `soriak-chat.js` : orchestration locale, sélection pondérée stable, contexte du
+  dernier sujet, gestion du fil et mémoire anti-répétition. Le classement ne peut
+  pas appeler de fonction du jeu. Une hausse des tentatives ou une résolution peut
+  réorienter un suivi comme « j'y arrive pas » vers le bon fichier.
+- `soriak-policy.js` : liste blanche de faits, plafond d'indices, contrôle des
+  réponses et non-répétition des valeurs secrètes. La vérification des mots de
+  passe reste exclusivement dans la logique existante du jeu.
+- `soriak.js` : présentation Messages, notifications et événements Living OS.
+  Les réactions proactives conservent leurs délais, blocages et règles anti-spam.
+
+La bibliothèque couvre identité, projet, aide, code, appels, fichiers, messages,
+Instagram, musique, ABEG, autre énigme, Safari, relation, confidentialité, soupçon,
+frustration, insultes, salutations, remerciements, départ et demandes hors sujet.
+Le neutre ne donne aucun indice, même avec une progression avancée. Les indices
+spécifiques restent conditionnés au sujet et aux niveaux déjà autorisés ; les
+secrets résolus produisent des réponses cohérentes avec leur état.
+
+### Mémoire et migration
+
+Le fil conserve au plus 60 messages via `persistProgress()` / `kairos.progress`.
+`state.livingOS.soriak.dialogue` conserve une graine stable, le compteur de tours,
+le dernier sujet, les derniers compteurs utiles et trois identifiants de réponse
+par intention. Les choix identiques ne se succèdent pas, y compris après refresh
+ou après une réaction proactive. Une relation plus avancée ouvre quelques variantes
+plus coopératives, sans dépasser le plafond d'indices.
+
+Les anciens échanges restent présents. L'ancien compteur de requêtes est retiré,
+et une demande interrompue provenant de la version réseau est terminée localement
+une seule fois. `pendingReply` remplace le pending de transport. Aucun ancien quota
+ne peut bloquer une nouvelle discussion. La saisie garde ses 360 caractères, Enter,
+les bulles immédiates et un indicateur d'écriture de 450ms purement visuel. Naviguer
+pendant ce délai ne perd pas la réponse. Les réponses hors fil deviennent non lues
+et attendent un contexte sûr pour leur notification.
+
+### Ajouter une intention ou une réponse
+
+Ajouter une définition pondérée dans `soriak-intents.js`, puis un groupe de réponses
+dans `soriak-responses.js`. Chaque déclencheur a un poids ; chaque intention a un
+seuil et une priorité. Chaque groupe peut préciser `target`, un état de résolution,
+un niveau d'indice, une app visitée, une écoute réelle ou une relation minimale.
+Un indice porte aussi `clue: { secret, stage }`, vérifié indépendamment par la
+policy. Ajouter des exemples contradictoires et ambigus aux fixtures avant de
+modifier les seuils. Aucun mot de passe ne doit être écrit dans le catalogue.
+
+### Validation
+
+```sh
+node --test tests/soriak_intents.cjs
+node tests/living_os_engine.cjs
+KAIROS_TEST_URL=http://127.0.0.1:8765 python tests/soriak_chat_browser.py
+KAIROS_TEST_URL=http://127.0.0.1:8765 python tests/living_os_browser.py
+KAIROS_TEST_URL=http://127.0.0.1:8765 python tests/living_os_native_swipe.py
+KAIROS_TEST_URL=http://127.0.0.1:8765 python tests/living_os_regressions.py
+```
+
+Démarrer un serveur statique avec `python -m http.server 8765`. Les fixtures de
+classification contiennent 88 messages réalistes. Les tests couvrent également les
+protections, niveaux, répétitions, migration, mémoire persistée et absence de toute
+requête pendant une discussion réellement hors connexion. Les régressions de médias
+externes restent isolées par leurs fixtures existantes.
+
+`?livingDebug=1` accélère uniquement les réactions proactives sur les hôtes de
+développement/preview. Le diagnostic du chat affiche intention et score, jamais
+le texte utilisateur ou les réponses secrètes. Aucun état de jeu n'est modifié par
+une réponse : seuls le fil, la mémoire de dialogue et les notifications sont mis à
+jour. Le shell, le swipe, les appels, les apps et les conversations existantes sont
+conservés. Safari physique reste une cible de recette manuelle.
+
+### Lore canonique et suivis courts
+
+`soriak-lore.js` contient les faits publics fournis pour KAIROS : Manii/Ephrem Amani,
+Paapii/Ange Diabaté (Diabaté Ange Ismaël), leur amitié d'enfance, le projet musical,
+sa sortie le 29 octobre 2026, le sens de KAIROS, le réalisateur, l'acteur principal,
+les lieux du tournage et la fin ouverte. Le classement personnel reste Bandite,
+Tu sais, LPB/La plus belle. Les comparaisons suivent ce classement sans inventer
+un top cinq. La préférence et les raisons restent celles du personnage.
+
+Les 16 nouvelles intentions distinguent projet, sens, date, artistes, identités,
+réalisation, acteur, film, tournage, fin, amitié, préféré, classement, comparaison
+et raison d'une préférence. La mémoire conserve `lastTopic`, `lastImportantIntent`
+et `lastEntity` pour « pourquoi ? », « et lui ? », « et quand ? », « et qui l'a
+fait ? ». Les formulations factuelles sont enregistrées avec un identifiant de
+provenance. La policy autorise leurs chiffres uniquement si le texte correspond
+exactement à une formulation canonique enregistrée. Les indices restent dans
+l'autre couche, avec leurs niveaux existants ; aucune date n'est transformée en
+mot de passe et aucune réponse de SORIAK ne peut valider un secret.
+
+Les variantes factuelles portent un ton direct, moqueur ou mystérieux. Les poids
+visent environ 50/30/20 avant filtrage anti-répétition ; il ne s'agit pas d'un quota
+rigide à chaque échange. Les réponses factuelles ne retombent pas sur le neutre.
+
+### Réception proactive et son optionnel
+
+Dès la première tentative pertinente sur l'un des deux fichiers (échec ou réussite),
+la règle unique `soriak-first-attempt` programme « Déjà ? » en 1,2–2 secondes,
+puis le processeur central le délivre au prochain passage (au plus une seconde
+supplémentaire). Cette introduction unique ne dépend pas de trois échecs. Elle
+peut passer avant l'espacement normal, mais attend toujours la fin d'un appel,
+FaceTime, modal, saisie en cours, autre bannière ou onglet masqué. Les réactions de visite de fichier, d'exploration et d'appel attendent cette
+première réception : elles ne peuvent pas la devancer. Les prochains
+indices gardent leurs seuils et leur espacement normal.
+
+Chaque réception proactive hors du fil affiche la bannière iOS existante, dans
+l'écran du téléphone, avec avatar, SORIAK, extrait et timestamp. Elle s'anime depuis
+le haut, s'efface après six secondes et ouvre directement le fil au clic/toucher,
+y compris depuis l'écran verrouillé. Dans le fil SORIAK, la bulle et le son suffisent.
+Le contenu et la logique d'unlock ne changent pas ; seuls les boutons de bannière
+rejoignent les cibles de tap autorisées pendant la capture du pointeur.
+
+Le fichier fourni `assets/audio/soriak-notification.mp3` est repris tel quel depuis
+le dépôt. Le remplacer à ce même chemin puis recharger la Preview suffit. Aucun
+fichier de production n'est généré par les tests. Le module
+`soriak-sound.js` crée un seul élément Audio, préchargé et amorcé silencieusement
+sur le premier pointerup ou clavier dans le téléphone. Chaque vraie réception
+possède une tentative sonore persistée ; ni refresh ni répétition d'événement
+ne relance le même son. Une nouvelle lecture remet la même piste à zéro et ne
+superpose pas une seconde instance. Les erreurs de fichier et refus d'autoplay
+restent silencieux et ne bloquent jamais les messages. Aucun ancien son n'est
+rejoué rétroactivement après une interaction.
+
+Tests supplémentaires :
+
+```sh
+node --test tests/soriak_lore.cjs tests/soriak_sound.cjs
+KAIROS_TEST_URL=http://127.0.0.1:8770 python tests/soriak_reception_browser.py
+```
+
+Les fixtures médias utilisent un bref WAV silencieux en mémoire pour tester la
+lecture, sans ajouter de faux asset. Un scénario dédié renvoie volontairement 404
+pour le fichier optionnel. Les suites historiques d'apps isolent les notifications
+proactives SORIAK dans leur état de départ ; leur réception réelle, l'absence du
+fichier et les indices sont vérifiés séparément dans les suites dédiées.
