@@ -3518,11 +3518,27 @@ svg.ui {
   background: #17191b;
 }
 
-/* Lock gesture feedback affects content only; wallpaper and device geometry stay fixed. */
-.lock-view .lock-center, .lock-view .lock-shortcuts, .lock-view .unlock {
-  translate: 0 var(--lock-swipe-y, 0px);
-  transition: translate .12s ease-out;
+/* The lockscreen is one surface above a state-free, noninteractive Home preview. */
+.lock-view {
+  transform: translate3d(0, var(--lock-drag-y, 0px), 0);
+  overscroll-behavior: none;
 }
-.lock-view.lock-dragging .lock-center, .lock-view.lock-dragging .lock-shortcuts, .lock-view.lock-dragging .unlock {
-  transition: none;
+.lock-view.active-view { animation: none; }
+.home-view.lock-home-preview {
+  z-index: 0;
+  display: block;
+  pointer-events: none;
+  animation: none;
+}
+.lock-view:is(.lock-dragging, .lock-settling) {
+  z-index: 1;
+  will-change: transform;
+  animation: none;
+}
+.lock-view.lock-dragging { transition: none; }
+.lock-view.lock-settling {
+  transition: transform 200ms cubic-bezier(.22, .61, .36, 1);
+}
+.lock-view.lock-unlocking {
+  transition-duration: 250ms;
 }

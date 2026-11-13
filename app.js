@@ -2197,14 +2197,51 @@ document.addEventListener("click", (e) => {
   const b = e.target.closest("[data-route]");
   if (b) route(b.dataset.route);
 });
+let lockSwipeTimer = null;
+let lockSwipeComplete = null;
 function resetLockSwipe() {
+  clearTimeout(lockSwipeTimer);
+  if (lockSwipeComplete) lock.removeEventListener("transitionend", lockSwipeComplete);
+  lockSwipeComplete = null;
+  lock.classList.remove("lock-dragging", "lock-settling", "lock-unlocking");
+  lock.style.removeProperty("--lock-drag-y");
+  home.classList.remove("lock-home-preview");
+  home.inert = false;
+  home.removeAttribute("aria-hidden");
+}
+function settleLockSwipe(unlock) {
   lock.classList.remove("lock-dragging");
-  lock.style.removeProperty("--lock-swipe-y");
+  lock.classList.add("lock-settling");
+  lock.classList.toggle("lock-unlocking", unlock);
+  // Commit the finger position before starting the release transition.
+  void lock.offsetHeight;
+  let finished = false;
+  const complete = (e) => {
+    if (e && (e.target !== lock || e.propertyName !== "transform")) return;
+    if (finished) return;
+    finished = true;
+    if (unlock) {
+      // Keep Home painted through the existing state handoff (no entrance animation).
+      unlockPhone();
+      home.getAnimations().forEach((animation) => animation.finish());
+    } else resetLockSwipe();
+  };
+  lockSwipeComplete = complete;
+  lock.addEventListener("transitionend", complete);
+  lock.style.setProperty("--lock-drag-y", unlock ? "-100%" : "0px");
+  lockSwipeTimer = setTimeout(complete, unlock ? 300 : 240);
+}
+function sampleLockSwipe(g, e) {
+  const now = e.timeStamp;
+  g.samples.push({ y: e.clientY, time: now });
+  while (g.samples.length > 1 && now - g.samples[0].time > 100) g.samples.shift();
+  if (Math.hypot(e.clientX - g.x, e.clientY - g.y) > 8) g.dragged = true;
 }
 let gesture = null,
   suppressClick = false;
 screen.addEventListener("pointerdown", (e) => {
   if (
+    lock.classList.contains("lock-settling") ||
     e.isPrimary === false ||
     state.callStatus !== "idle" ||
     e.target.closest(
@@ -2228,16 +2265,25 @@ screen.addEventListener("pointerdown", (e) => {
     photo: !!$("#photoViewer.open"),
   };
   if (gesture.lock) {
+    suppressClick = false;
+    gesture.samples = [{ y: e.clientY, time: e.timeStamp }];
+    gesture.dragged = false;
+    gesture.tapTarget = e.target.closest("#lockFlashlight, #lockCamera");
+    screen.setPointerCapture(e.pointerId);
+    home.classList.add("lock-home-preview");
+    home.inert = true;
+    home.setAttribute("aria-hidden", "true");
     lock.classList.add("lock-dragging");
-    (e.target.closest("button") || screen).setPointerCapture(e.pointerId);
   }
 });
 screen.addEventListener("pointermove", (e) => {
   if (!gesture || gesture.id !== e.pointerId) return;
   if (gesture.lock) {
+    sampleLockSwipe(gesture, e);
     const rawDy = e.clientY - gesture.y, rawDx = e.clientX - gesture.x;
-    const progress = rawDy < 0 && Math.abs(rawDy) > Math.abs(rawDx) * .65 ? Math.min(-rawDy / 80, 1) : 0;
-    lock.style.setProperty("--lock-swipe-y", `${-progress * 28}px`);
+    const visualY = rawDy < 0 && -rawDy > Math.abs(rawDx) * 1.2
+      ? Math.max(rawDy * .88, -screen.getBoundingClientRect().height) : 0;
+    lock.style.setProperty("--lock-drag-y", `${visualY}px`);
     return;
   }
   const dx = (e.clientX - gesture.x) * gesture.ratio,
@@ -2256,13 +2302,25 @@ screen.addEventListener("pointerup", (e) => {
     dy = (e.clientY - g.y) * g.ratio;
   let handled = false;
   if (g.lock) {
-    resetLockSwipe();
-    const rawDy = e.clientY - g.y, rawDx = e.clientX - g.x,
-      duration = performance.now() - g.startTime;
-    if ((rawDy <= -28 && Math.abs(rawDy) > Math.abs(rawDx) * .75) ||
-        (rawDy <= -16 && duration <= 300 && Math.abs(rawDy) > Math.abs(rawDx) * .65)) {
-      unlockPhone();
+    sampleLockSwipe(g, e);
+    const distance = g.y - e.clientY, horizontal = Math.abs(e.clientX - g.x);
+    const first = g.samples[0], elapsed = e.timeStamp - first.time;
+    const velocity = elapsed > 0 ? (first.y - e.clientY) / elapsed : 0;
+    const vertical = distance > horizontal * 1.2;
+    const unlock = vertical && (distance >= Math.min(80, screen.getBoundingClientRect().height * .10) ||
+      (distance >= 24 && velocity >= .5));
+    if (unlock) {
+      // Prime activation-dependent media while pointerup still has user activation.
+      systemSounds.enable();
+      warmAppleMusic();
+    }
+    if (!g.dragged && g.tapTarget) {
+      resetLockSwipe();
+      g.tapTarget.click();
       handled = true;
+    } else {
+      settleLockSwipe(unlock);
+      handled = g.dragged || unlock;
     }
   } else if (g.home && dy < -45 && Math.abs(dy) > Math.abs(dx) * 1.3) {
     goHome();
@@ -2283,7 +2341,11 @@ screen.addEventListener("pointerup", (e) => {
     setTimeout(() => (suppressClick = false), 350);
   }
 });
-screen.addEventListener("pointercancel", () => { gesture = null; resetLockSwipe(); });
+screen.addEventListener("pointercancel", (e) => {
+  if (!gesture || gesture.id !== e.pointerId) return;
+  gesture = null;
+  resetLockSwipe();
+});
 screen.addEventListener(
   "click",
   (e) => {
