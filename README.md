@@ -298,12 +298,12 @@ inchangés ; leur disponibilité ne conditionne pas le chat.
 
 ### Architecture
 
-- `soriak-intents.js` : 28 intentions, seuils, mots entiers, expressions pondérées,
+- `soriak-intents.js` : 44 intentions, seuils, mots entiers, expressions pondérées,
   priorités explicites et normalisation (accents, casse, apostrophes, ponctuation,
   SMS et quelques fautes fréquentes). Les intentions spécifiques comme une demande
   de code passent avant les thèmes incidentels. Une égalité ambiguë revient au
   neutre au lieu d'inventer une réponse précise.
-- `soriak-responses.js` : 221 formulations distinctes écrites, séparées du classement.
+- `soriak-responses.js` : 347 formulations distinctes écrites, séparées du classement.
   Les groupes déclarent leurs conditions, priorités, poids et éventuel niveau
   d'indice. Les appels, visites, écoutes et résolutions ne sont affirmés que si les
   faits autorisés le permettent.
@@ -374,3 +374,67 @@ le texte utilisateur ou les réponses secrètes. Aucun état de jeu n'est modifi
 une réponse : seuls le fil, la mémoire de dialogue et les notifications sont mis à
 jour. Le shell, le swipe, les appels, les apps et les conversations existantes sont
 conservés. Safari physique reste une cible de recette manuelle.
+
+### Lore canonique et suivis courts
+
+`soriak-lore.js` contient les faits publics fournis pour KAIROS : Manii/Ephrem Amani,
+Paapii/Ange Diabaté (Diabaté Ange Ismaël), leur amitié d'enfance, le projet musical,
+sa sortie le 29 octobre 2026, le sens de KAIROS, le réalisateur, l'acteur principal,
+les lieux du tournage et la fin ouverte. Le classement personnel reste Bandite,
+Tu sais, LPB/La plus belle. Les comparaisons suivent ce classement sans inventer
+un top cinq. La préférence et les raisons restent celles du personnage.
+
+Les 16 nouvelles intentions distinguent projet, sens, date, artistes, identités,
+réalisation, acteur, film, tournage, fin, amitié, préféré, classement, comparaison
+et raison d'une préférence. La mémoire conserve `lastTopic`, `lastImportantIntent`
+et `lastEntity` pour « pourquoi ? », « et lui ? », « et quand ? », « et qui l'a
+fait ? ». Les formulations factuelles sont enregistrées avec un identifiant de
+provenance. La policy autorise leurs chiffres uniquement si le texte correspond
+exactement à une formulation canonique enregistrée. Les indices restent dans
+l'autre couche, avec leurs niveaux existants ; aucune date n'est transformée en
+mot de passe et aucune réponse de SORIAK ne peut valider un secret.
+
+Les variantes factuelles portent un ton direct, moqueur ou mystérieux. Les poids
+visent environ 50/30/20 avant filtrage anti-répétition ; il ne s'agit pas d'un quota
+rigide à chaque échange. Les réponses factuelles ne retombent pas sur le neutre.
+
+### Réception proactive et son optionnel
+
+Dès la première tentative pertinente sur l'un des deux fichiers (échec ou réussite),
+la règle unique `soriak-first-attempt` programme « Déjà ? » en 1,2–2 secondes,
+puis le processeur central le délivre au prochain passage (au plus une seconde
+supplémentaire). Cette introduction unique ne dépend pas de trois échecs. Elle
+peut passer avant l'espacement normal, mais attend toujours la fin d'un appel,
+FaceTime, modal, saisie en cours, autre bannière ou onglet masqué. Les réactions de visite de fichier, d'exploration et d'appel attendent cette
+première réception : elles ne peuvent pas la devancer. Les prochains
+indices gardent leurs seuils et leur espacement normal.
+
+Chaque réception proactive hors du fil affiche la bannière iOS existante, dans
+l'écran du téléphone, avec avatar, SORIAK, extrait et timestamp. Elle s'anime depuis
+le haut, s'efface après six secondes et ouvre directement le fil au clic/toucher,
+y compris depuis l'écran verrouillé. Dans le fil SORIAK, la bulle et le son suffisent.
+Le contenu et la logique d'unlock ne changent pas ; seuls les boutons de bannière
+rejoignent les cibles de tap autorisées pendant la capture du pointeur.
+
+Ajouter simplement le fichier `assets/audio/soriak-notification.mp3` puis recharger
+la Preview. Aucun fichier de production n'est généré par les tests. Le module
+`soriak-sound.js` crée un seul élément Audio, préchargé et amorcé silencieusement
+sur le premier pointerup ou clavier dans le téléphone. Chaque vraie réception
+possède une tentative sonore persistée ; ni refresh ni répétition d'événement
+ne relance le même son. Une nouvelle lecture remet la même piste à zéro et ne
+superpose pas une seconde instance. Les erreurs de fichier et refus d'autoplay
+restent silencieux et ne bloquent jamais les messages. Aucun ancien son n'est
+rejoué rétroactivement après une interaction.
+
+Tests supplémentaires :
+
+```sh
+node --test tests/soriak_lore.cjs tests/soriak_sound.cjs
+KAIROS_TEST_URL=http://127.0.0.1:8770 python tests/soriak_reception_browser.py
+```
+
+Les fixtures médias utilisent un bref WAV silencieux en mémoire pour tester la
+lecture, sans ajouter de faux asset. Un scénario dédié renvoie volontairement 404
+pour le fichier optionnel. Les suites historiques d'apps isolent les notifications
+proactives SORIAK dans leur état de départ ; leur réception réelle, l'absence du
+fichier et les indices sont vérifiés séparément dans les suites dédiées.

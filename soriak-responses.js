@@ -1,5 +1,6 @@
 /* Written content only. Gates are declarative; selectors live in soriak-chat.js. */
 (function(root){
+ const lore=typeof module!=='undefined'&&module.exports?require('./soriak-lore.js'):root.SoriakLore;
  const groups=[];
  function add(id,intents,texts,requires={},priority=0,clue=null){groups.push({id,intents:[].concat(intents),requires,priority,clue,responses:texts.map((text,i)=>({id:id+':'+i,text,weight:1}))});}
  add('code','ASK_CODE',[
@@ -50,6 +51,7 @@
  add('safari-visited','ASK_SAFARI',['Tu as déjà ouvert Safari. Reprends les pages disponibles.','Retourne au navigateur si tu veux vérifier.','Les liens disponibles sont toujours là.','Regarde ce que Safari te propose vraiment.'],{visited:'safari'},50);
  add('music-played','ASK_MUSIC',['Tu as lancé {track}. Prends le temps d’écouter.','{track}. Tu peux repartir de là.','Tu as déjà lancé un morceau. Écoute-le vraiment.','Ce que tu as écouté compte aussi.'],{played:true},60);
  add('cooperative',['USER_LOST','ASK_WHAT_TO_DO','USER_WANTS_MORE'],['On avance. Reprends une piste que tu as laissée.','Tu fais des liens. Continue sans te disperser.','Prends ton temps. Tu peux faire le tri maintenant.','Moins de précipitation. Tu peux y arriver.'],{minRelationship:6},20);
+ groups.push(...lore.groups);
  const api={groups,total:()=>new Set(groups.flatMap(g=>g.responses.map(r=>r.text))).size};
  if(typeof module!=='undefined'&&module.exports)module.exports=api;else root.SoriakResponses=api;
 })(globalThis);

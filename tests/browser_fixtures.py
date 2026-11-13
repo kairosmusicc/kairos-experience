@@ -1,5 +1,15 @@
 """Empty official metadata for unrelated regressions. Rich provider fixtures live in v81_reality.py."""
+def isolate_soriak_audio(context):
+    """Test-only silent cue; production asset is deliberately supplied by its owner."""
+    import io, wave
+    raw = io.BytesIO()
+    with wave.open(raw, 'wb') as audio:
+        audio.setnchannels(1); audio.setsampwidth(2); audio.setframerate(8000)
+        audio.writeframes(b'\0\0' * 240)
+    context.route('**/assets/audio/soriak-notification.mp3', lambda route: route.fulfill(status=200, content_type='audio/wav', body=raw.getvalue()))
+
 def isolate_apple_metadata(context):
+    isolate_soriak_audio(context)
     context.route('https://itunes.apple.com/**', lambda route: route.fulfill(status=200, content_type='application/json', headers={'Access-Control-Allow-Origin':'*'}, body='{"resultCount":0,"results":[]}'))
 
 # Official script/players are isolated here: not live Instagram content validation.
@@ -18,6 +28,7 @@ def isolate_instagram_embeds(context):
 
 # Rich metadata/media below are explicit test-only fixtures, never verified production URLs.
 def rich_metadata(ctx, pending=None):
+    isolate_soriak_audio(ctx)
     import io, json
     from pathlib import Path
     from PIL import Image

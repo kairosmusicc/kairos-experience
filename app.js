@@ -2274,7 +2274,7 @@ screen.addEventListener("pointerdown", (e) => {
     suppressClick = false;
     gesture.samples = [{ y: e.clientY, time: e.timeStamp }];
     gesture.dragged = false;
-    gesture.tapTarget = e.target.closest("#lockFlashlight, #lockCamera, .lock-notif");
+    gesture.tapTarget = e.target.closest("#lockFlashlight, #lockCamera, .lock-notif, .story-open, .story-dismiss");
     screen.setPointerCapture(e.pointerId);
     home.classList.add("lock-home-preview");
     home.inert = true;

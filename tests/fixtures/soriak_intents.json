@@ -18,7 +18,7 @@
  ["t'es qui ?", "ASK_WHO_ARE_YOU"],
  ["qui es-tu", "ASK_WHO_ARE_YOU"],
  ["ton nom ?", "ASK_WHO_ARE_YOU"],
- ["c'est quoi kairos", "ASK_KAIROS"],
+ ["c'est quoi kairos", "ASK_PROJECT"],
  ["KÁÏROS", "ASK_KAIROS"],
  ["moment opportun", "ASK_KAIROS"],
  ["je dois faire quoi", "ASK_WHAT_TO_DO"],

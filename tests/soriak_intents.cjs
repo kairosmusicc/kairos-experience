@@ -12,13 +12,13 @@ test(`${fixtures.length} realistic messages: normalization, SMS, accents, priori
  assert.equal(I.classify('fichiers musique').ambiguous,true);
  assert.equal(I.classify('décodage').intent,'USER_RANDOM');
 });
-test('28 intentions; at least 100 unique short written responses; no answers at any stage',()=>{
- assert.equal(I.definitions.length,28);assert.ok(R.total()>=100);
+test('44 intentions; at least 300 unique short written responses; no answers at any stage',()=>{
+ assert.equal(I.definitions.length,44);assert.ok(R.total()>=300);
  for(const group of R.groups)for(const item of group.responses){
   const text=item.text.replace('{track}','TU SAIS');
   assert.ok(text.length<=160,item.id);assert.ok(!P.containsAnswer(text),item.id);
-  assert.ok(P.allowed({text,clue:group.clue},context({abegAttempts:7,timeAttempts:5})),item.id);
-  if(group.clue)assert.ok(!P.allowed({text,clue:group.clue},context({})),item.id);
+  assert.ok(P.allowed({...item,text,clue:group.clue},context({abegAttempts:7,timeAttempts:5})),item.id);
+  if(group.clue)assert.ok(!P.allowed({...item,text,clue:group.clue},context({})),item.id);
  }
  console.log(R.total()+' unique written responses');
 });
@@ -45,7 +45,7 @@ test('stable weighted selection, bounded persisted per-intent memory, no consecu
   assert.ok(seen.size>=4,message);
  }
  assert.equal(JSON.stringify(game),original,'only dialogue memory may change');
- assert.ok(Object.values(m.used).every(ids=>ids.length<=3));assert.ok(Object.keys(m.used).length<=28);
+ assert.ok(Object.values(m.used).every(ids=>ids.length<=3));assert.ok(Object.keys(m.used).length<=I.definitions.length);
  const restored=JSON.parse(JSON.stringify(m));assert.deepEqual(selectReply('salut',game,m),selectReply('salut',game,restored));
  for(const c of [{},{abegAttempts:7,timeAttempts:5}])for(let i=0;i<20;i++)assert.equal(selectReply('xylophone cosmique',context(c),memory()).clue,null);
 });

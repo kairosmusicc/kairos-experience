@@ -1,5 +1,6 @@
 /* Local text-only boundary. Context is allowlisted; secret verification stays in the game. */
 (function (root) {
+  const lore = typeof module !== 'undefined' && module.exports ? require('./soriak-lore.js') : root.SoriakLore;
   const apps = ['messages','whatsapp','notes','files','music','spotify','instagram','safari','photos','camera','phone','facetime','settings','calendar'];
   // Matches verification answers for redaction only, never repeated in SORIAK replies.
   const forbidden = [[49,48,50,57], [84,73,77,69]].map(chars => String.fromCharCode(...chars));
@@ -28,15 +29,15 @@
   }
   function allowed(entry, raw) {
     const c = context(raw), text = entry.text || '';
-    if (!text || text.length > 160 || containsAnswer(text) || /[<>`#*\d{}]/.test(text)) return false;
+    if (!text || text.length > 160 || containsAnswer(text) || /[<>`#*{}]/.test(text) || (/\d/.test(text) && !lore.isCanonical(entry))) return false;
     if (entry.clue) {
       const permitted = entry.clue.secret === 'abeg' ? c.abegHintStage : c.timeHintStage;
       if (permitted < entry.clue.stage) return false;
     }
     return true;
   }
-  function reply(text, raw, clue = null) {
-    return allowed({text,clue},raw) ? text : 'Regarde autour de toi.';
+  function reply(text, raw, clue = null, loreId = null) {
+    return allowed({text,clue,loreId},raw) ? text : 'Regarde autour de toi.';
   }
   const policy = { context, stage, redact, containsAnswer, allowed, reply, maxMessage: 360 };
   if (typeof module !== 'undefined' && module.exports) module.exports = policy;

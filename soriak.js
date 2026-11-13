@@ -4,6 +4,7 @@
   const copy = Object.freeze({
     discovery: 'Tu fouilles beaucoup.',
     'protected-file': 'Tu comptes l’ouvrir ?',
+    'first-attempt': 'Déjà ?',
     'abeg-struggle': 'Tu compliques un truc simple.',
     'abeg-date': 'Commence par la date.',
     'abeg-other': 'Lis-la autrement.',
@@ -20,8 +21,10 @@
     obsolete: c => c[secret + 'Unlocked'], effect: { type: 'soriak_message', messageId: id },
   });
   const rules = [
+    { id:'soriak-first-attempt',event:['secret_attempt_failed','secret_unlocked'],once:true,priority:10,spacing:0,delay:[1200,2000],
+      when:(c,p)=>['abeg','time'].includes(p.secret),effect:{type:'soriak_message',messageId:'first-attempt'} },
     { id: 'soriak-protected-file', event: 'file_opened', once: true, priority: 1, delay: [25000,40000],
-      when: (c,p) => ['abeg','tout'].includes(p.file) && (p.file === 'abeg' ? !c.abegUnlocked && c.abegAttempts === 0 : !c.timeUnlocked && c.timeAttempts === 0),
+      when: (c,p) => sent(c,'first-attempt') && ['abeg','tout'].includes(p.file) && (p.file === 'abeg' ? !c.abegUnlocked && c.abegAttempts === 0 : !c.timeUnlocked && c.timeAttempts === 0),
       obsolete: (c,p) => p.file === 'abeg' ? c.abegUnlocked || c.abegAttempts > 0 : c.timeUnlocked || c.timeAttempts > 0,
       effect: { type: 'soriak_message', messageId: 'protected-file' } },
     hint('abeg-struggle', 'abeg', 3),
@@ -30,13 +33,13 @@
     hint('time-number', 'time', 3),
     hint('time-project', 'time', 5, 'time-number'),
     { id: 'soriak-discovery', event: 'app_opened', once: true, priority: 1, delay: [20000, 30000], minAge: 90000,
-      when: c => c.unlocked && c.visitedApps.length >= 3,
+      when: c => sent(c,'first-attempt') && c.unlocked && c.visitedApps.length >= 3,
       effect: { type: 'soriak_message', messageId: 'discovery' } },
     { id: 'soriak-abeg-success', event: 'secret_unlocked', once: true, priority: 4, delay: [20000, 35000],
       when: (c, p) => p.secret === 'abeg' && c.abegUnlocked,
       effect: { type: 'soriak_message', messageId: 'abeg-success' } },
     { id: 'soriak-call-declined', event: 'call_declined', once: true, priority: 0, delay: [35000, 45000],
-      when: c => c.os.soriak.discovered,
+      when: c => sent(c,'first-attempt'),
       effect: { type: 'soriak_message', messageId: 'call-declined' } },
 
   ];
@@ -56,6 +59,20 @@
     return minutes === 0 ? 'maintenant' : `il y a ${minutes} min`;
   };
   let chat = null;
+  const receptionSound = new SoriakNotificationSound();
+  const primeSound = () => receptionSound.unlock();
+  screen.addEventListener('pointerup',primeSound,{once:true,capture:true});
+  screen.addEventListener('keydown',primeSound,{once:true,capture:true});
+  function soundReceipt(record) {
+    if(record.soundAttempted)return;
+    record.soundAttempted=true;
+    receptionSound.playFor(record.id);
+  }
+  function showReceipt(record) {
+    if(!notifications.show({key:record.id,app:'Messages',image:avatar,sender:'SORIAK',preview:notificationText(record),duration:6000,sound:false,open:()=>openThread(record.id)}))return false;
+    soundReceipt(record);
+    return true;
+  }
   const notificationText = n => n.text || copy[n.messageId] || '...';
   function records() { return state.livingOS.notificationHistory.filter(n => n.type === 'soriak_message'); }
   function markRead() {
@@ -140,7 +157,7 @@
     refreshThread();
     const pendingBanner = records().find(n => n.bannerPending && !n.read);
     if (pendingBanner && !blocked() && !$('[data-soriak-thread]')) {
-      if (notifications.show({key:pendingBanner.id,app:'Messages',image:avatar,sender:'SORIAK',preview:notificationText(pendingBanner),open:()=>openThread(pendingBanner.id)})) {
+      if (showReceipt(pendingBanner)) {
         pendingBanner.bannerPending = false;
         persistProgress();
       }
@@ -160,14 +177,16 @@
     if (effect.type !== 'soriak_message' || !copy[effect.messageId] || state.livingOS.soriak.sentMessageIds.includes(effect.messageId)) return false;
     const at = Date.now();
     const inThread = !!$('[data-soriak-thread]');
-    if (!inThread && !notifications.show({ key: pending.id, app: 'Messages', image: avatar, sender: 'SORIAK', preview: copy[effect.messageId], open: () => openThread(pending.id) })) return false;
+    const record={id:pending.id,type:effect.type,messageId:effect.messageId,text:copy[effect.messageId],at,read:inThread};
+    if (!inThread && !showReceipt(record)) return false;
+    if (inThread) soundReceipt(record);
     const s = state.livingOS.soriak;
     if (!s.discoveredAt) s.discoveredAt = at;
     s.relationshipLevel += 1;
     s.sentMessageIds.push(effect.messageId);
     s.threadRead = inThread;
     if (!inThread) s.unreadCount += 1;
-    state.livingOS.notificationHistory.push({ id: pending.id, type: effect.type, messageId: effect.messageId, text:copy[effect.messageId], at, read: inThread });
+    state.livingOS.notificationHistory.push(record);
     chat.append({id:pending.id,role:'soriak',text:copy[effect.messageId],at,source:'living-os'});
     if (inThread) refreshThread();
     syncUI();

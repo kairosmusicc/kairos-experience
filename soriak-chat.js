@@ -5,8 +5,10 @@
  const intents=node?require('./soriak-intents.js'):root.SoriakIntents;
  const content=node?require('./soriak-responses.js'):root.SoriakResponses;
  function hash(value){let n=2166136261;for(const ch of String(value))n=Math.imul(n^ch.charCodeAt(0),16777619);return n>>>0;}
- function matches(requires,c,target){
+ function matches(requires,c,target,classification={}){
   return Object.entries(requires).every(([key,value])=>{
+   if(key==='comparison')return classification.comparison===value;
+   if(key==='entity')return classification.entity===value;
    if(key==='target')return target===value;
    if(key==='visited')return c.visitedApps.includes(value);
    if(key==='played')return c.recentlyPlayed.length>0;
@@ -16,7 +18,7 @@
  }
  function selectReply(message,raw,memory){
   const c=policy.context(raw),classification=intents.classify(message,c,memory);
-  let groups=content.groups.filter(g=>g.intents.includes(classification.intent) && matches(g.requires,c,classification.target));
+  let groups=content.groups.filter(g=>g.intents.includes(classification.intent) && matches(g.requires,c,classification.target,classification));
   const priority=Math.max(...groups.map(g=>g.priority));
   groups=groups.filter(g=>g.priority===priority);
   const candidates=groups.flatMap(g=>g.responses.map(r=>({...r,clue:g.clue,text:r.text.replace('{track}',c.recentlyPlayed[0]?.title || 'ce morceau')}))).filter(r=>policy.allowed(r,c));
@@ -27,16 +29,17 @@
   // A tiny pool can still avoid consecutive repetition without escalating hints.
   if(!available.length)available=content.groups.find(g=>g.id==='neutral').responses.filter(r=>r.text!==memory.lastReply);
   const total=available.reduce((n,r)=>n+r.weight,0);
-  let position=hash(`${memory.seed}:${memory.turn || 0}:${classification.intent}`)%total;
+  let position=hash(`${memory.seed}:${memory.turn || 0}:${classification.intent}`)/4294967296*total;
   let chosen=available[0];
   for(const entry of available){if(position<entry.weight){chosen=entry;break;}position-=entry.weight;}
-  const text=policy.reply(chosen.text,c,chosen.clue);
+  const text=policy.reply(chosen.text,c,chosen.clue,chosen.loreId);
   memory.used[classification.intent]=[chosen.id,...recent.filter(id=>id!==chosen.id)].slice(0,3);
   memory.lastReply=text;memory.lastIntent=classification.intent;
+  if(classification.topic){memory.lastTopic=classification.topic;memory.lastImportantIntent=classification.intent;memory.lastEntity=classification.entity || null;}
   if(classification.target)memory.lastTarget=classification.target;
   for(const key of ['abegAttempts','timeAttempts','abegUnlocked','timeUnlocked'])memory[key]=c[key];
   memory.turn=(memory.turn || 0)+1;
-  return {text,intent:classification.intent,target:classification.target,score:classification.score,ambiguous:classification.ambiguous,clue:chosen.clue || null};
+  return {text,intent:classification.intent,target:classification.target,score:classification.score,ambiguous:classification.ambiguous,clue:chosen.clue || null,loreId:chosen.loreId || null,tone:chosen.tone || null};
  }
  class SoriakChat {
   constructor({state,legacy,context,persist,changed,received,debug=false}){
@@ -62,7 +65,7 @@
   }
   finish(pending){
    const decision=pending.reply || selectReply(pending.message,this.context(),this.state.dialogue);
-   const message={id:'reply:'+pending.id,role:'soriak',text:policy.reply(decision.text,this.context(),decision.clue),at:Date.now(),source:'interactive'};
+   const message={id:'reply:'+pending.id,role:'soriak',text:policy.reply(decision.text,this.context(),decision.clue,decision.loreId),at:Date.now(),source:'interactive'};
    const duplicate=this.state.thread.some(m=>m.id===message.id);
    this.state.pendingReply=null;this.busy=false;
    if(!duplicate){this.append(message);this.received(message,{intent:decision.intent});}
