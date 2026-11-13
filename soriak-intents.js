@@ -71,7 +71,7 @@
   const rank=id=>lore.tracks.findIndex(t=>t.id===id);
   const comparison=mentioned.length>=2 && tokens.has('ou') ? [...mentioned].sort((a,b)=>rank(a)-rank(b)).slice(0,2).join('|') : null;
   let follow=null,entity=null;
-  if(text==='pourquoi' && memory.lastTopic==='music') {follow='ASK_PREFERENCE_REASON';entity=memory.lastEntity || 'bandite';}
+  if(['pourquoi','et pourquoi'].includes(text) && memory.lastTopic==='music') {follow='ASK_PREFERENCE_REASON';entity=memory.lastEntity || 'bandite';}
   if(text==='et lui' && ['manii','paapii'].includes(memory.lastEntity))follow=memory.lastEntity==='manii'?'ASK_PAAPII':'ASK_MANII';
   if(['et quand','quand'].includes(text) && memory.lastTopic==='project')follow='ASK_RELEASE_DATE';
   if(['et qui l a fait','qui l a fait'].includes(text) && ['project','film'].includes(memory.lastTopic))follow=memory.lastTopic==='film'?'ASK_DIRECTOR':'ASK_ARTISTS';

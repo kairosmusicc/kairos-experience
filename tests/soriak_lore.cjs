@@ -19,7 +19,7 @@ test('canonical facts, ranking, follows and numeric provenance, without game mut
  const state={abegAttempts:0,abegHintStage:0,timeAttempts:0,timeHintStage:0};const snapshot=JSON.stringify(state);
  const m=memory(),ask=q=>selectReply(q,state,m);
  assert.match(ask('ton top 3').text,/Bandite.*Tu sais.*LPB|Bandite.*Tu sais.*La plus belle/);
- assert.match(ask('ton préféré').text,/Bandite/);assert.match(ask('pourquoi ?').text,/Bandite/);
+ assert.match(ask('ton préféré').text,/Bandite/);assert.match(ask('pourquoi ?').text,/Bandite/);assert.match(ask('et pourquoi ?').text,/Bandite/);
  assert.match(ask("Manii c'est qui").text,/Ephrem|Manii/);
  assert.equal(ask('et lui ?').intent,'ASK_PAAPII');
  assert.match(ask('Kairos est sorti quand').text,/29 octobre/);assert.equal(ask("et qui l'a fait ?").intent,'ASK_ARTISTS');
