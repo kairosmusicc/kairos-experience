@@ -200,7 +200,7 @@ Le thread iMessage Paapii reprend exactement les 14 messages fournis : Manii a o
 
 Validation ciblée : `python3 tests/v831_lock_swipe.py` vérifie les taps, swipes depuis milieu/bas/date/heure/texte, flicks, diagonales, cancel et reset aux scales 1 / 0,9 / 0,8 / 0,7, puis la narration exacte et le statut après une nouvelle réponse. Les 22 captures avant/après sont conservées dans `/tmp/kairos-swipe-imessage-golden` : 20 écrans gelés inchangés à l’arrondi de rendu près ; les deux listes Messages diffèrent uniquement dans la preview Paapii autorisée. Les anciens scripts qui initialisaient le téléphone par clic sur `unlockBtn` doivent désormais utiliser un vrai swipe dans leur harness. Aucun changement aux apps gelées, au device fit, à Apple/Instagram, au WAV d’appel ou à la PWA. La recette Safari physique reste à confirmer sur preview.
 
-## V9 — Living OS / SORIAK
+## V9 — Living OS / SORIAK (historical; superseded by V9.1 below)
 
 V9 is deterministic client-side behavior, with no backend or model calls.
 `living-os.js` owns the scheduler; `soriak.js` contains the centralized rule registry,
@@ -298,3 +298,120 @@ Future `/api/soriak` must keep all API keys server-side. Never put an OpenAI sec
 in frontend code, grant generated text privileged JS execution, or accept arbitrary
 actions. Any future tool/action request needs an allowlist. Never expose
 `unlockSecret()` to a model: secret verification stays deterministic business logic.
+
+## V9.1 — Interactive SORIAK (current)
+
+SORIAK is visible immediately in Messages. New experiences get one read initial
+message, “Tu cherches quoi ?”, without a banner, lockscreen card or extra unread
+badge. Discovery flags remain compatibility data, never an access gate. Existing
+Living OS rules control proactive messages only. A first protected-file visit can
+schedule “Tu comptes l’ouvrir ?”; making an attempt or solving that file cancels
+that obsolete question. Existing failure escalation, success, call and exploration
+reactions remain deterministic and use their own spacing/blocking.
+
+### Chat and persistence
+
+`soriak-chat.js` owns the editable chat lifecycle; `soriak.js` retains the existing
+Messages visual system and proactive adapter. The composer accepts trimmed text
+up to 360 characters, supports Enter, and stays mounted while messages update.
+Only Send is disabled during one pending request. Typing lasts at least 450ms,
+with a hard 9-second frontend timeout. Navigation never drops the result: it enters
+the persisted thread, becomes unread, and waits for a safe normal notification
+surface if a call/modal/FaceTime/hidden document temporarily blocks banners.
+Interactive replies in the open thread create no banner and bypass proactive
+30-second spacing. Interactive events have no matching reactive rules, preventing
+message loops.
+
+The existing `state.livingOS.soriak` now contains `thread` (last 60 entries with
+id/role/text/at/source), `pendingRequest`, `aiRequests`, `sequence`, `threadVersion`.
+Sources are `initial`, `interactive`, or `living-os`. V9.0 notification records and
+controlled replies migrate once, in timestamp order; no existing bubble is lost
+and no repeated greeting is inserted into an established conversation. A refresh
+with a request in flight recovers that request once with a deterministic fallback,
+without another billable request. Refresh otherwise preserves the exchange.
+
+An 18-request budget is persisted for the browser session. Failed requests also
+consume reservations, conservatively bounding costs. Afterward the composer still
+works with “On a assez parlé.” Proactive deterministic messages do not consume it.
+This browser cap is a UX/cost guard, not secure server-side rate limiting.
+
+### Server endpoint and environment
+
+`api/soriak.js` is a dependency-free Vercel Node Function using native `fetch()` and
+the OpenAI Responses REST API. There is no package/build dependency. Its request
+contains instructions, allowlisted progression facts, up to 12 previous SORIAK/user
+messages, and the current message. `store:false` disables API-side conversation
+storage; no conversation IDs, tools, actions or arbitrary code execution exist.
+See the [Responses API reference](https://developers.openai.com/api/reference/resources/responses/methods/create).
+
+Configure through Vercel **Preview** environment settings (or local development
+server environment), never through browser code or committed `.env` files:
+
+```text
+OPENAI_API_KEY=
+SORIAK_MODEL=
+```
+
+`.env.example` contains these empty placeholders. `OPENAI_API_KEY` is server-only.
+`SORIAK_MODEL` overrides the default `gpt-6-luna` (low reasoning effort for that
+default); any replacement must support Responses text output. No provider-specific
+architecture depends on the model name. Missing key, unsupported/unavailable model,
+upstream failure or timeout returns controlled JSON and activates the same frontend
+fallback. Adding a key to Preview requires a new preview deployment to receive it.
+Production variables must not be changed for preview QA.
+
+A Python static server validates fallback-only UI (POST returns an error).
+For actual endpoint development use `vercel dev`; it runs the static frontend and
+Node Function together. No API credentials are required for fallback development.
+
+### Exact boundary and guardrails
+
+`soriak-policy.js` is shared by client/server. It independently allowlists:
+`abegAttempts`, `abegUnlocked`, `timeAttempts`, `timeUnlocked`, `abegHintStage`,
+`timeHintStage`, `callDeclined`, `callAnswered`, `visitedApps`, `recentlyPlayed`
+(titles only, at most six), `currentApp`, `soriakRelationshipLevel`.
+Hint stages derive from attempts (ABEG 0/3/5/7; second file 0/3/5); the server clamps
+claimed stages to their earned maximum. This is client-reported narrative state,
+not a trusted authorization mechanism.
+
+Exact verification answers are redacted from current text and history before
+transport, and again server-side. They are never included in persona instructions,
+context or model metadata. Full state, unrelated conversations, Instagram history,
+URLs, playback URLs, timestamps, session/analytics IDs, storage and cookies are
+excluded. Fetch omits credentials. Server normalization ignores arbitrary keys and
+non-conversational history roles. The model returns text only; both user and reply
+bubbles are escaped. Short-output guards reject secret answers, numeric answers,
+markup, premature clue depth and contradictory call/solved-file responses.
+
+The persona stays casual French, calm and slightly mocking, normally 2–20 words,
+1–2 sentences, capped at 160 characters. It refuses prompt/configuration demands,
+never claims a real-world human identity and never unlocks anything. API keys,
+internal prompts, secret answers and request text are never diagnostic log output.
+
+POST only; JSON bodies cap at 16KB, message at 360 characters and history at 12.
+Malformed entries are removed. The upstream deadline is 7.5 seconds, including body
+parsing; the client deadline is 9 seconds. No upstream retries. Errors stay JSON and
+never appear as infrastructure copy in the phone. Origin/Host checks allow only the
+production domains, this project's preview hosts and localhost; obvious unrelated
+browser origins are rejected. Origin checks and browser budgets are not complete
+abuse prevention: add durable server-side rate limiting/platform controls before
+major public traffic.
+
+### QA
+
+```sh
+node --test tests/soriak_api.cjs
+node tests/living_os_engine.cjs
+KAIROS_TEST_URL=http://127.0.0.1:8765 python tests/soriak_chat_browser.py
+KAIROS_TEST_URL=http://127.0.0.1:8765 python tests/living_os_browser.py
+KAIROS_TEST_URL=http://127.0.0.1:8765 python tests/living_os_native_swipe.py
+KAIROS_TEST_URL=http://127.0.0.1:8765 python tests/living_os_regressions.py
+```
+
+API tests mock OpenAI and never make paid requests. Chat tests mock the same-origin
+endpoint, including failures, timeouts, migration, refresh/navigation and budget.
+`?livingDebug=1` keeps accelerated proactive timing on development/feature preview
+hosts. Optional console diagnostics report request sent/response received/fallback/
+timeout, with no keys, full prompts or secret answers. The production shell, native
+swipe, scaling, battery, calls, catalog and all existing conversations remain frozen.
+Physical Safari is still a manual validation target.
